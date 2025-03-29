@@ -1,0 +1,29 @@
+name: estrategia
+description: Juego de cartas multijugador online
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.0
+  socket_io_client: ^2.0.3
+  cupertino_icons: ^1.0.2
+  cloud_firestore: ^4.13.0
+  firebase_core: ^2.25.4
+  intl: ^0.18.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon.png
+    - assets/logo.png
+    - assets/cartas/

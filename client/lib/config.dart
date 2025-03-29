@@ -1,0 +1,1 @@
+const String socketServerUrl = "http://localhost:3000"; // Cambia esto si usas Railway/Render

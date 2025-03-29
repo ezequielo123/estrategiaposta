@@ -1,0 +1,19 @@
+# Flutter
+build/
+.dart_tool/
+.packages
+pubspec.lock
+
+# Node
+node_modules/
+.env
+logs/
+
+# iOS/Android
+ios/Flutter/Flutter.framework
+android/.gradle/
+*.apk
+*.ipa
+
+# VSCode
+.vscode/
