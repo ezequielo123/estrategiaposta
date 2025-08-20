@@ -92,7 +92,7 @@ class _CartaConAnimacionState extends State<_CartaConAnimacion>
   @override
   Widget build(BuildContext context) {
     final carta = widget.jugada.carta;
-    final String imgPath = 'assets/cartas/${carta.numero}_${carta.palo}.png';
+    final String imgPath = 'assets/cartas/${carta.numero}_${carta.palo}.jpeg';
 
     return FadeTransition(
       opacity: _fadeIn,

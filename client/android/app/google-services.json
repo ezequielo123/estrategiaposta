@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "272357526071",
+    "project_id": "estrategia-ad734",
+    "storage_bucket": "estrategia-ad734.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:272357526071:android:baf943cbbc827c37744db2",
+        "android_client_info": {
+          "package_name": "com.example.estrategia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnd9I4JLJ7AsEQGFCrb3KR7n5CADd2ISU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

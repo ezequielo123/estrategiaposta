@@ -1,103 +1,145 @@
 import 'package:flutter/material.dart';
 
 class PlayerSeat extends StatelessWidget {
+  const PlayerSeat({
+    super.key,
+    required this.nombre,
+    required this.puntos,
+    required this.posicion,
+    required this.esJugadorActual,
+    this.ultimoMensaje,
+
+    // ⟵ NUEVO: estado de turno de predicción
+    this.enTurnoPred = false,
+    this.segsRestantesPred,
+    this.segsTotalesPred = 15,
+  });
+
   final String nombre;
   final int puntos;
   final Offset posicion;
   final bool esJugadorActual;
   final String? ultimoMensaje;
 
-  const PlayerSeat({
-    super.key,
-    required this.nombre,
-    required this.puntos,
-    required this.posicion,
-    this.esJugadorActual = false,
-    this.ultimoMensaje,
-  });
+  // ⟵ NUEVO
+  final bool enTurnoPred;
+  final int? segsRestantesPred; // si es null, no se muestra el anillo
+  final int segsTotalesPred;    // default 15
 
   @override
   Widget build(BuildContext context) {
-    final size = 80.0;
+    final avatarSize = 64.0;
+
+    // Progreso para anillo (0..1)
+    final total = segsTotalesPred <= 0 ? 1 : segsTotalesPred;
+    final left = (segsRestantesPred ?? total).clamp(0, total);
+    final progress = left / total;
 
     return Positioned(
       left: posicion.dx,
       top: posicion.dy,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 💬 Mensaje de chat flotante (con animación)
-          AnimatedOpacity(
-            opacity: ultimoMensaje != null ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: ultimoMensaje != null
-                ? Container(
-                    constraints: BoxConstraints(maxWidth: 150),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    margin: const EdgeInsets.only(bottom: 6),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // Avatar base
+              Container(
+                width: avatarSize,
+                height: avatarSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: esJugadorActual ? Colors.amber.withOpacity(0.35) : Colors.black26,
+                  border: Border.all(
+                    color: esJugadorActual ? Colors.amber : Colors.white24,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    _iniciales(nombre),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+              ),
+
+              // ⟵ NUEVO: anillo de progreso para turno de predicción
+              if (enTurnoPred && segsRestantesPred != null)
+                SizedBox(
+                  width: avatarSize + 10,
+                  height: avatarSize + 10,
+                  child: CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 5,
+                    backgroundColor: Colors.white24,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      progress > 0.33 ? Colors.lightGreenAccent : Colors.redAccent,
+                    ),
+                  ),
+                ),
+
+              // ⟵ NUEVO: numerito con segundos restantes (opcional)
+              if (enTurnoPred && segsRestantesPred != null)
+                Positioned(
+                  bottom: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      ultimoMensaje!,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontSize: 12,
-                      ),
-                      softWrap: true,
-                      overflow: TextOverflow.ellipsis,
+                      '$left s',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
-                  )
-                : const SizedBox.shrink(),
+                  ),
+                ),
+            ],
           ),
-
-          // 🎭 Avatar con glow animado si es el jugador actual
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.deepPurple.shade300,
-              border: esJugadorActual
-                  ? Border.all(color: Colors.amberAccent, width: 4)
-                  : null,
-              boxShadow: esJugadorActual
-                  ? [
-                      BoxShadow(
-                        color: Colors.yellowAccent.withOpacity(0.9),
-                        blurRadius: 16,
-                        spreadRadius: 4,
-                      ),
-                    ]
-                  : [],
+          const SizedBox(height: 6),
+          SizedBox(
+            width: avatarSize + 40,
+            child: Column(
+              children: [
+                Text(
+                  nombre,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+                Text(
+                  '$puntos pts',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                if (ultimoMensaje != null && ultimoMensaje!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      ultimoMensaje!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white60, fontSize: 11),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+              ],
             ),
-            child: Center(
-              child: Text(
-                nombre.substring(0, 1).toUpperCase(),
-                style: const TextStyle(fontSize: 28, color: Colors.white),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          // 🔠 Nombre con Tooltip si es largo
-          Tooltip(
-            message: nombre,
-            child: Text(
-              nombre.length > 10 ? '${nombre.substring(0, 8)}...' : nombre,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
-
-          // ⭐️ Puntos
-          Text(
-            '$puntos pts',
-            style: const TextStyle(color: Colors.amberAccent, fontSize: 12),
           ),
         ],
       ),
     );
+  }
+
+  String _iniciales(String n) {
+    final parts = n.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
   }
 }

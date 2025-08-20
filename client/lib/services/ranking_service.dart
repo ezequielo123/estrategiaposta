@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart'; // Para debugPrint
 
 class RankingService {
   static final _ranking = FirebaseFirestore.instance.collection('ranking');
@@ -10,8 +11,9 @@ class RankingService {
         'puntos': puntos,
         'timestamp': FieldValue.serverTimestamp(),
       });
+      debugPrint('🏆 Ganador registrado: $nombre con $puntos pts');
     } catch (e) {
-      print('🔥 Error al guardar ranking: $e');
+      debugPrint('🔥 Error al guardar ranking: $e');
     }
   }
 }

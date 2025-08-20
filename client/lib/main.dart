@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'services/socket_service.dart'; // 👈 FALTA ESTO
+
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart'; // generado por FlutterFire CLI
 
@@ -27,6 +29,9 @@ class EstrategiaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SocketService().registerContext(context);
+    });
     return MaterialApp(
       title: 'Estrategia 🃏',
       debugShowCheckedModeBanner: false,

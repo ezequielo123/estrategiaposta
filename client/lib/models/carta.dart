@@ -11,8 +11,9 @@ class Carta {
 
   factory Carta.fromJson(Map<String, dynamic> json) {
     return Carta(
-      numero: json['numero'],
-      palo: json['palo'],
+      numero: json['numero'] is int ? json['numero'] : int.tryParse(json['numero'].toString()) ?? 0,
+      palo: json['palo']?.toString() ?? 'desconocido',
     );
   }
+
 }

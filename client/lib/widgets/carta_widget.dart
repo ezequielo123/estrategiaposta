@@ -32,71 +32,88 @@ class CartaWidget extends StatelessWidget {
   Color get paloColor {
     switch (palo.toLowerCase()) {
       case 'oros':
-        return Colors.amber;
+        return Colors.amber.shade700;
       case 'copas':
         return Colors.redAccent;
       case 'espadas':
-        return Colors.grey.shade300;
+        return Colors.grey.shade600;
       case 'bastos':
-        return Colors.brown.shade300;
+        return Colors.brown.shade400;
       default:
-        return Colors.white;
+        return Colors.black;
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      margin: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.black, width: 1),
-        boxShadow: [
-          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(2, 2))
-        ],
-      ),
-      child: Stack(
-        children: [
-          // Número
-          Positioned(
-            top: 8,
-            left: 8,
-            child: Text(
-              '$numero',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-          ),
+Widget build(BuildContext context) {
+  final String assetPath = 'assets/cartas/${numero}_${palo.toLowerCase()}.jpeg';
 
-          // Simbolo en el centro
-          Center(
-            child: Text(
-              simbolo,
-              style: TextStyle(fontSize: 40),
-            ),
-          ),
-
-          // Palo abajo
-          Positioned(
-            bottom: 6,
-            right: 6,
-            child: Text(
-              palo,
-              style: TextStyle(
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-                color: paloColor,
+  return Container(
+    width: width,
+    height: height,
+    margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.black87, width: 1),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black26,
+          blurRadius: 4,
+          offset: Offset(2, 2),
+        )
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.asset(
+        assetPath,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          // fallback visual si falta la imagen
+          return Stack(
+            children: [
+              // Número
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Text(
+                  '$numero',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+
+              // Simbolo en el centro
+              Center(
+                child: Text(
+                  simbolo,
+                  style: const TextStyle(fontSize: 40),
+                ),
+              ),
+
+              // Palo abajo
+              Positioned(
+                bottom: 6,
+                right: 6,
+                child: Text(
+                  palo.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                    color: paloColor,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
+}
 }
