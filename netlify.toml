@@ -1,7 +1,12 @@
 [build]
+  base    = "client"
   command = "bash netlify_build.sh"
-  publish = "client/build/web"
+  publish = "build/web"
 
-# Opcional: fijar versión de Flutter que clona el script
 [build.environment]
-  FLUTTER_VERSION = "stable"
+  # Opcional: fijar versión si te sirve
+  # FLUTTER_VERSION = "3.22.2"
+
+# Opcional: evitar que Netlify auto-detecte frameworks ajenos
+[plugins]
+  # (vacío)
