@@ -166,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 fit: StackFit.expand,
                 children: [
                   Image.asset(
-                    'segundo.png',
+                    'assets/segundo.png',
                     fit: BoxFit.contain,
                     alignment: Alignment.center,
                   ),
