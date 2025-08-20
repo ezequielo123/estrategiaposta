@@ -2,7 +2,6 @@
   command = "bash netlify_build.sh"
   publish = "client/build/web"
 
+# Opcional: fijar versión de Flutter que clona el script
 [build.environment]
-  FLUTTER_VERSION = "3.24.0"
-  # Opcional: subí el “soft memory limit” si ves OOM (no siempre hace falta)
-  # NETLIFY_BUILD_DEBUG = "true"
+  FLUTTER_VERSION = "stable"

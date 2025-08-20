@@ -1,36 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "🏗  Netlify Flutter Web build"
-
 ROOT="$(pwd)"
 CLIENT_DIR="$ROOT/client"
-FLUTTER_VERSION="${FLUTTER_VERSION:-3.24.0}"   # podés fijarlo o dejarlo por env
-FLUTTER_SDK_DIR="$HOME/flutter"
+FLUTTER_VERSION="${FLUTTER_VERSION:-stable}"
 
-echo "🔧 Instalando dependencias de sistema (unzip, xz-utils, libglu)…"
-apt-get update -y
-apt-get install -y git unzip xz-utils libglu1-mesa >/dev/null
+echo "▶️ Instalando Flutter ($FLUTTER_VERSION)…"
+git clone --depth 1 -b "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$ROOT/flutter"
+export PATH="$ROOT/flutter/bin:$PATH"
 
-if [ ! -d "$FLUTTER_SDK_DIR" ]; then
-  echo "⬇️  Descargando Flutter $FLUTTER_VERSION…"
-  git clone --depth 1 -b "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$FLUTTER_SDK_DIR"
-else
-  echo "♻️  Reutilizando Flutter en $FLUTTER_SDK_DIR"
-fi
-
-export PATH="$FLUTTER_SDK_DIR/bin:$PATH"
-
-echo "🧪 Flutter doctor (resumen)…"
 flutter --version
-flutter config --enable-web
+flutter doctor -v || true
 
-echo "📦 Pub get…"
+echo "▶️ Resolviendo dependencias…"
 cd "$CLIENT_DIR"
 flutter pub get
 
-echo "🧱 Build web…"
-# Elegí el renderer que mejor te funcione. canvaskit suele ser más estable visualmente.
-flutter build web --release --web-renderer canvaskit --source-maps
+echo "▶️ Compilando Flutter Web (release)…"
+# Si querés CanvasKit: agregá --web-renderer canvaskit
+flutter build web --release --no-tree-shake-icons
 
-echo "✅ Listo. Publicar desde: $CLIENT_DIR/build/web"
+echo "✅ Listo. Publicando: $CLIENT_DIR/build/web"
