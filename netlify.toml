@@ -6,7 +6,3 @@
 [build.environment]
   # Opcional: fijar versión si te sirve
   # FLUTTER_VERSION = "3.22.2"
-
-# Opcional: evitar que Netlify auto-detecte frameworks ajenos
-[plugins]
-  # (vacío)
