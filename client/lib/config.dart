@@ -1,7 +1,7 @@
 // lib/config.dart
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
-const String kProdServer = 'https://estrategia-server.up.railway.app';
+const String kProdServer = 'https://estrategiaposta.onrender.com';
 
 String get socketServerUrl {
   // while debugging the local server:

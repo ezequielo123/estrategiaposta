@@ -1,59 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=========================="
-echo " Netlify: Flutter Web Build"
-echo " CWD: $(pwd)"
-echo " FLUTTER_VERSION=${FLUTTER_VERSION:-<none>}"
-echo "=========================="
+echo "→ Working dir: $(pwd)"
+ls -la || true
 
-# Ruta del SDK dentro del repo (Netlify [build.base] apunta a client/)
-ROOT="$(pwd)"
-FLUTTER_SDK="$ROOT/.flutter"
-
-echo "→ Clonando Flutter SDK en $FLUTTER_SDK"
-rm -rf "$FLUTTER_SDK"
-git clone https://github.com/flutter/flutter.git "$FLUTTER_SDK"
-
-# Soportar canales (stable/beta/dev/master) y tags (3.x.x, etc.)
-CHANNELS=("stable" "beta" "dev" "master")
-if [[ -z "${FLUTTER_VERSION:-}" ]]; then
-  echo "→ FLUTTER_VERSION no seteada, usando canal 'stable'"
-  git -C "$FLUTTER_SDK" checkout stable
-  git -C "$FLUTTER_SDK" pull --ff-only
-else
-  if [[ " ${CHANNELS[*]} " =~ " ${FLUTTER_VERSION} " ]]; then
-    echo "→ Usando canal '${FLUTTER_VERSION}'"
-    git -C "$FLUTTER_SDK" checkout "$FLUTTER_VERSION"
-    git -C "$FLUTTER_SDK" pull --ff-only
+# Asegurá que estamos parados en el proyecto Flutter (donde vive pubspec.yaml)
+if [[ ! -f "pubspec.yaml" ]]; then
+  if [[ -f "client/pubspec.yaml" ]]; then
+    echo "→ Encontré proyecto en client/, moviéndome allí"
+    cd client
   else
-    echo "→ Usando tag '${FLUTTER_VERSION}'"
-    git -C "$FLUTTER_SDK" fetch --tags
-    git -C "$FLUTTER_SDK" checkout "refs/tags/$FLUTTER_VERSION" || \
-    git -C "$FLUTTER_SDK" checkout "$FLUTTER_VERSION"
+    echo "✗ No encuentro pubspec.yaml en $(pwd)"
+    exit 1
   fi
 fi
 
-export PATH="$FLUTTER_SDK/bin:$PATH"
-export PUB_CACHE="$ROOT/.pub-cache"
+# Instalar/rehusar Flutter (estable) en caché
+FLUTTER_ROOT="$HOME/flutter-sdk"
+if [[ ! -x "$FLUTTER_ROOT/bin/flutter" ]]; then
+  echo "→ Instalando Flutter stable en $FLUTTER_ROOT"
+  git clone --depth 1 -b stable https://github.com/flutter/flutter.git "$FLUTTER_ROOT"
+else
+  echo "→ Reusando Flutter en $FLUTTER_ROOT"
+  (cd "$FLUTTER_ROOT" && git fetch --depth 1 origin stable && git checkout -f stable)
+fi
+export PATH="$FLUTTER_ROOT/bin:$PATH"
 
-echo "→ Versión de Flutter:"
 flutter --version
-
-echo "→ Habilitando web"
 flutter config --enable-web
 
-echo "→ Resolviendo dependencias"
+# Dependencias + build
 flutter pub get
-
-echo "→ Compilando Web (release)"
-# No pasamos --web-renderer para evitar errores en hosts que no lo reconocen
 flutter build web --release
 
-# Copiar redirects de SPA si existen
-if [[ -f "web/_redirects" ]]; then
-  echo "→ Copiando web/_redirects → build/web/_redirects"
-  cp -f web/_redirects build/web/_redirects
-fi
-
-echo "✅ Build terminado. Output: $ROOT/build/web"
+# Comprobación de salida
+test -d build/web || (echo "✗ build/web no existe" && exit 2)
+echo "✓ Build OK. Output: $(pwd)/build/web"
