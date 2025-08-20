@@ -1,34 +1,59 @@
 #!/usr/bin/env bash
-set -euxo pipefail   # ← agrega -x para log detallado
+set -euo pipefail
 
-echo "PWD: $(pwd)"   # Debe ser .../repo/client
+echo "=========================="
+echo " Netlify: Flutter Web Build"
+echo " CWD: $(pwd)"
+echo " FLUTTER_VERSION=${FLUTTER_VERSION:-<none>}"
+echo "=========================="
 
-FLUTTER_SDK="$HOME/flutter"
-FLUTTER_VERSION="${FLUTTER_VERSION:-}"
+# Ruta del SDK dentro del repo (Netlify [build.base] apunta a client/)
+ROOT="$(pwd)"
+FLUTTER_SDK="$ROOT/.flutter"
 
+echo "→ Clonando Flutter SDK en $FLUTTER_SDK"
 rm -rf "$FLUTTER_SDK"
 git clone https://github.com/flutter/flutter.git "$FLUTTER_SDK"
-if [[ -n "$FLUTTER_VERSION" ]]; then
-  git -C "$FLUTTER_SDK" fetch --tags
-  git -C "$FLUTTER_SDK" checkout "refs/tags/$FLUTTER_VERSION"
-else
+
+# Soportar canales (stable/beta/dev/master) y tags (3.x.x, etc.)
+CHANNELS=("stable" "beta" "dev" "master")
+if [[ -z "${FLUTTER_VERSION:-}" ]]; then
+  echo "→ FLUTTER_VERSION no seteada, usando canal 'stable'"
   git -C "$FLUTTER_SDK" checkout stable
   git -C "$FLUTTER_SDK" pull --ff-only
-  git -C "$FLUTTER_SDK" fetch --tags
+else
+  if [[ " ${CHANNELS[*]} " =~ " ${FLUTTER_VERSION} " ]]; then
+    echo "→ Usando canal '${FLUTTER_VERSION}'"
+    git -C "$FLUTTER_SDK" checkout "$FLUTTER_VERSION"
+    git -C "$FLUTTER_SDK" pull --ff-only
+  else
+    echo "→ Usando tag '${FLUTTER_VERSION}'"
+    git -C "$FLUTTER_SDK" fetch --tags
+    git -C "$FLUTTER_SDK" checkout "refs/tags/$FLUTTER_VERSION" || \
+    git -C "$FLUTTER_SDK" checkout "$FLUTTER_VERSION"
+  fi
 fi
 
 export PATH="$FLUTTER_SDK/bin:$PATH"
+export PUB_CACHE="$ROOT/.pub-cache"
 
+echo "→ Versión de Flutter:"
 flutter --version
+
+echo "→ Habilitando web"
 flutter config --enable-web
-flutter precache --web || true
-flutter doctor -v || true
 
-flutter clean
-flutter pub get -v     # ← VERBOSE para detectar la dependencia faltante
+echo "→ Resolviendo dependencias"
+flutter pub get
 
-if flutter build web -h 2>&1 | grep -q -- "--web-renderer"; then
-  flutter build web --release --web-renderer canvaskit
-else
-  flutter build web --release
+echo "→ Compilando Web (release)"
+# No pasamos --web-renderer para evitar errores en hosts que no lo reconocen
+flutter build web --release
+
+# Copiar redirects de SPA si existen
+if [[ -f "web/_redirects" ]]; then
+  echo "→ Copiando web/_redirects → build/web/_redirects"
+  cp -f web/_redirects build/web/_redirects
 fi
+
+echo "✅ Build terminado. Output: $ROOT/build/web"
