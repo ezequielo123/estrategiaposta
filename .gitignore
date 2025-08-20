@@ -19,3 +19,12 @@ android/.gradle/
 .vscode/
 # Local Netlify folder
 .netlify
+
+# Client build
+client/build/
+client/build/web/
+client/.dart_tool/
+
+# Server deps/env
+server/node_modules/
+server/.env
