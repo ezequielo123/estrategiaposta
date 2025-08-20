@@ -1,30 +1,36 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -euo pipefail
 
-# Directorio del client (este script vive en client/, pero por seguridad)
-cd "$(dirname "$0")"
+echo "🏗  Netlify Flutter Web build"
 
-# 1) Instalar Flutter (cache local en Netlify)
-FLUTTER_VERSION="3.22.3"
-if [ ! -d "$HOME/flutter" ]; then
-  git clone --depth 1 -b "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$HOME/flutter"
+ROOT="$(pwd)"
+CLIENT_DIR="$ROOT/client"
+FLUTTER_VERSION="${FLUTTER_VERSION:-3.24.0}"   # podés fijarlo o dejarlo por env
+FLUTTER_SDK_DIR="$HOME/flutter"
+
+echo "🔧 Instalando dependencias de sistema (unzip, xz-utils, libglu)…"
+apt-get update -y
+apt-get install -y git unzip xz-utils libglu1-mesa >/dev/null
+
+if [ ! -d "$FLUTTER_SDK_DIR" ]; then
+  echo "⬇️  Descargando Flutter $FLUTTER_VERSION…"
+  git clone --depth 1 -b "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$FLUTTER_SDK_DIR"
+else
+  echo "♻️  Reutilizando Flutter en $FLUTTER_SDK_DIR"
 fi
-export PATH="$HOME/flutter/bin:$PATH"
 
+export PATH="$FLUTTER_SDK_DIR/bin:$PATH"
+
+echo "🧪 Flutter doctor (resumen)…"
 flutter --version
 flutter config --enable-web
 
-# 2) Dependencias de Dart/Flutter
+echo "📦 Pub get…"
+cd "$CLIENT_DIR"
 flutter pub get
 
-# 3) Build web (canvasKit para mayor compatibilidad)
-flutter build web --release --web-renderer canvaskit
+echo "🧱 Build web…"
+# Elegí el renderer que mejor te funcione. canvaskit suele ser más estable visualmente.
+flutter build web --release --web-renderer canvaskit --source-maps
 
-# 4) Asegurar redirects SPA (opcional si ya lo tenés en web/_redirects)
-mkdir -p build/web
-if [ ! -f build/web/_redirects ]; then
-  echo '/* /index.html 200' > build/web/_redirects
-fi
-
-# 5) Listar salida para debug
-ls -lah build/web
+echo "✅ Listo. Publicar desde: $CLIENT_DIR/build/web"
