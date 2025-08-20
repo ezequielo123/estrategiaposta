@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(pwd)"
-CLIENT_DIR="$ROOT/client"
-FLUTTER_VERSION="${FLUTTER_VERSION:-stable}"
+echo "PWD: $(pwd)"   # debe ser .../repo/client
 
-echo "▶️ Instalando Flutter ($FLUTTER_VERSION)…"
-git clone --depth 1 -b "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$ROOT/flutter"
-export PATH="$ROOT/flutter/bin:$PATH"
+# --- Flutter SDK (instalar si no está disponible en el build) ---
+FLUTTER_CHANNEL="${FLUTTER_CHANNEL:-stable}"
+FLUTTER_SDK="$HOME/flutter"
 
-flutter --version
-flutter doctor -v || true
+if ! command -v flutter >/dev/null 2>&1; then
+  echo "Instalando Flutter ($FLUTTER_CHANNEL) en $FLUTTER_SDK..."
+  git clone --depth 1 -b "$FLUTTER_CHANNEL" https://github.com/flutter/flutter.git "$FLUTTER_SDK"
+fi
 
-echo "▶️ Resolviendo dependencias…"
-cd "$CLIENT_DIR"
+export PATH="$FLUTTER_SDK/bin:$PATH"
+
+flutter --version || true
+flutter config --enable-web
+
+# --- Build ---
+flutter clean
 flutter pub get
-
-echo "▶️ Compilando Flutter Web (release)…"
-# Si querés CanvasKit: agregá --web-renderer canvaskit
-flutter build web --release --no-tree-shake-icons
-
-echo "✅ Listo. Publicando: $CLIENT_DIR/build/web"
+flutter build web --release --web-renderer=canvaskit --pwa-strategy=none
