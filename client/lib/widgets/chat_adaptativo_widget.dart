@@ -134,6 +134,7 @@ class _ChatAdaptativoWidgetState extends State<ChatAdaptativoWidget> {
             topRight: const Radius.circular(14),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Header
               InkWell(

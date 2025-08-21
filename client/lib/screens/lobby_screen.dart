@@ -70,9 +70,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
         Map<String, dynamic>.from((data['estado'] as Map?) ?? const {});
 
     final List<Map<String, dynamic>> jugadasIniciales =
-        ((data['jugadasIniciales'] as List?) ?? const [])
-            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        (
+          (data['jugadasIniciales'] as List?)             // preferida por el cliente
+          ?? (data['jugadas'] as List?)                   // fallback desde el server actual
+          ?? const []
+        )
+        .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
 
     // Si tu GameScreen pide otros required, pásalos aquí también
     Future.microtask(() {

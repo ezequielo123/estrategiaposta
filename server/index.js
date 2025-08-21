@@ -185,6 +185,12 @@ io.on('connection', (socket) => {
         io.to(codigo).emit('turno_prediccion', { id: data, nombre: sig?.nombre || '' });
       } else if (event === 'predicciones_completas') {
         io.to(codigo).emit('predicciones_completas');
+        // ⬇️ Arranca el turno de JUEGO (primera baza)
+        const firstId = sala.getJugadorTurnoJuego?.();
+        if (firstId) {
+          const pj = sala.getJugador(firstId);
+          io.to(codigo).emit('turno_jugar', { id: firstId, nombre: pj?.nombre || '' });
+        }
       } else if (event === 'error_prediccion') {
         io.to(socket.id).emit('error_prediccion', data);
       } else if (event === 'opciones_validas_prediccion') {
@@ -226,8 +232,15 @@ io.on('connection', (socket) => {
       io.to(codigo).emit('fin_mano', resumen);
 
       if (sala.rondaTerminada()) {
-        sala.evaluarPredicciones();
-        io.to(codigo).emit('fin_ronda', sala.getPuntajes());
+        // ⬇️ SUMA puntos de la ronda y emite puntuaciones
+        const detalle = sala.evaluarPredicciones();
+        const puntajes = sala.getPuntajes();
+
+        // Mantener compatibilidad: 'fin_ronda' sigue enviando SOLO la lista de puntajes
+        io.to(codigo).emit('fin_ronda', puntajes);
+
+        // Extra (opcional): detalle con delta/total por jugador
+        io.to(codigo).emit('fin_ronda_detalle', { detalle, puntajes, ronda: sala.ronda });
 
         const ganador = sala.jugadorGanador();
         if (ganador) {
@@ -260,6 +273,21 @@ io.on('connection', (socket) => {
             io.to(siguienteId).emit('opciones_validas_prediccion', opciones);
           }
         }
+      } else {
+        // 🟢 La ronda sigue: el ganador de la baza lidera la siguiente.
+        const idTurno = sala.getJugadorTurnoJuego?.();
+        if (idTurno) {
+          const pj = sala.getJugador(idTurno);
+          io.to(codigo).emit('turno_jugar', { id: idTurno, nombre: pj?.nombre || '' });
+        }
+      }
+    } else {
+      // 🟢 La baza NO terminó: pasa el turno al siguiente jugador
+      sala.avanzarTurnoJuego?.();
+      const idTurno = sala.getJugadorTurnoJuego?.();
+      if (idTurno) {
+        const pj = sala.getJugador(idTurno);
+        io.to(codigo).emit('turno_jugar', { id: idTurno, nombre: pj?.nombre || '' });
       }
     }
   });
