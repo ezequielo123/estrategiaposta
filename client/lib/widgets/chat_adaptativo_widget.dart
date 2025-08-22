@@ -18,7 +18,7 @@ class ChatAdaptativoWidget extends StatefulWidget {
 
 class _ChatAdaptativoWidgetState extends State<ChatAdaptativoWidget> {
   // UI
-  static const double _kHeaderH = 44;
+  static const double _kHeaderH = 44;   // altura preferida (sin forzar)
   static const double _kExpandedH = 280;
 
   final msgCtrl = TextEditingController();
@@ -134,9 +134,10 @@ class _ChatAdaptativoWidgetState extends State<ChatAdaptativoWidget> {
             topRight: const Radius.circular(14),
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            // 👉 Para que el header se adapte al alto disponible
+            mainAxisSize: MainAxisSize.max,
             children: [
-              // Header
+              // Header (alto flexible: sin height fijo para evitar overflow)
               InkWell(
                 onTap: () {
                   setState(() {
@@ -146,42 +147,47 @@ class _ChatAdaptativoWidgetState extends State<ChatAdaptativoWidget> {
                   _primeAudio(); // primera interacción, habilita audio en web
                 },
                 child: Container(
-                  height: _kHeaderH,
+                  // En lugar de height fijo, imponemos un mínimo y dejamos que se adapte.
+                  constraints: const BoxConstraints(minHeight: 40),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   color: Colors.deepPurple.withOpacity(0.7),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.chat_bubble_outline, color: Colors.white),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Chat',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (_unread > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.amber[700],
-                            borderRadius: BorderRadius.circular(999),
-                          ),
+                  child: SizedBox(
+                    // altura preferida (no obligatoria); si el padre da menos, no desborda
+                    height: _kHeaderH,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                        const SizedBox(width: 8),
+                        const Expanded(
                           child: Text(
-                            '$_unread',
-                            style: const TextStyle(
-                                color: Colors.black, fontWeight: FontWeight.bold),
+                            'Chat',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        minimizado ? Icons.expand_less : Icons.expand_more,
-                        color: Colors.white,
-                      ),
-                    ],
+                        if (_unread > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber[700],
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '$_unread',
+                              style: const TextStyle(
+                                  color: Colors.black, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          minimizado ? Icons.expand_less : Icons.expand_more,
+                          color: Colors.white,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

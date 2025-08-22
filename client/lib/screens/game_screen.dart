@@ -19,6 +19,8 @@ import '../services/ranking_service.dart';
 import '../widgets/scoreboard_panel.dart';
 import '../widgets/prediction_bar.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'final_score_screen.dart';
+
 
 
 class GameScreen extends StatefulWidget {
@@ -362,24 +364,50 @@ class _GameScreenState extends State<GameScreen> {
     socket.on('fin_partida', (data) async {
       try {
         final m = Map<String, dynamic>.from(data as Map);
-        final g = m['ganador'];
-        final nombre =
-            (g is Map) ? (g['nombre'] ?? '').toString() : g.toString();
-        final puntos =
-            (g is Map) ? ((g['puntos'] as num?)?.toInt() ?? 0) : 0;
 
-        setState(() {
-          ganador = nombre;
-        });
+        // ganador: { nombre, puntos }
+        final ganadorMap = Map<String, dynamic>.from(m['ganador'] ?? const {});
+        final nombreGanador = (ganadorMap['nombre'] ?? '').toString();
 
-        await RankingService.registrarGanador(nombre, puntos);
+        // tablero: [{id,nombre,puntos}] - puede no venir si el server es viejo
+        final tablero = (m['tablero'] as List?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            const <Map<String, dynamic>>[];
+
+        final rondas = (m['rondas'] as num?)?.toInt() ?? 0;
+
+        if (mounted) {
+          setState(() {
+            ganador = nombreGanador; // si usás este estado en la UI actual
+          });
+        }
+
+        // 🔕 Importante:
+        // Ya NO llamamos RankingService.registrarGanador(nombre, puntos)
+        // El ranking ahora lo actualiza el server en Firestore (3 por victoria).
 
         if (!mounted) return;
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) Navigator.pushReplacementNamed(context, '/ranking');
-        });
-      } catch (e) {
-        debugPrint('❌ Error en fin_partida: $e');
+
+        if (tablero.isNotEmpty) {
+          // ✅ Ruta nueva: mostramos tablero final antes del ranking
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => FinalScoreScreen(
+                ganador: ganadorMap,
+                tablero: tablero,
+                rondas: rondas,
+              ),
+            ),
+          );
+        } else {
+          // ♻️ Compatibilidad con payload viejo (sin tablero):
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) Navigator.pushReplacementNamed(context, '/ranking');
+          });
+        }
+      } catch (e, st) {
+        debugPrint('❌ Error en fin_partida: $e\n$st');
       }
     });
 

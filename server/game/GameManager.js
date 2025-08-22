@@ -235,14 +235,9 @@ class GameRoom {
   }
 
   jugadorGanador() {
-    const maxRondas = this.patronCartas.length;
-    if (this.ronda > maxRondas) {
-      return this.jugadores.reduce(
-        (max, j) => (j.puntos > max.puntos ? j : max),
-        this.jugadores[0]
-      );
-    }
-    return null;
+    // Gana el primero que alcanza 101 puntos (o más)
+    const ganador = this.jugadores.find(j => (j.puntos ?? 0) >= 101);
+    return ganador || null;
   }
 
   eliminarJugador(idJugador) {

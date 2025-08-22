@@ -7,7 +7,12 @@ const cors = require('cors');
 const { createGameRoom, getGameRoom, eliminarSala, salas } = require('./game/GameManager');
 const { logEvento, logSala, logJugador } = require('./logger');
 
+// 🔥 Firestore (AGREGADO)
+const { upsertUser, createGame, recordRound, finishGame, getRanking } = require('./storage/firestore');
+
 const app = express();
+
+const sessionUsers = new Map(); // socket.id -> { userId, name }
 
 // --- CORS (configurable por env) ---
 const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -19,6 +24,24 @@ app.use(cors({ origin: allowedOrigins, credentials: true }));
 // health & raíz
 app.get('/', (_, res) => res.send('OK'));
 app.get('/health', (_, res) => res.json({ ok: true }));
+
+// Endpoint ranking (AGREGADO opcional)
+app.get('/ranking', async (_, res) => {
+  try {
+    const raw = await getRanking(50);
+    const top = raw.map(r => ({
+      id: r.id,
+      name: r.name,
+      games_played: r.games_played,
+      games_won: r.games_won,
+      ranking_points: r.ranking_points ?? 0,
+      points_total: r.ranking_points ?? 0, // alias compat
+    }));
+    res.json(top);
+  } catch (e) {
+    res.status(500).json({ error: 'ranking_failed' });
+  }
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -48,11 +71,17 @@ io.on('connection', (socket) => {
   // CREAR SALA
   // client: socket.emit('crear_sala', { nombreHost, maxJugadores })
   // ─────────────────────────────────────
-  socket.on('crear_sala', ({ nombreHost, maxJugadores }) => {
+  socket.on('crear_sala', async ({ nombreHost, maxJugadores }) => { // <-- async (AGREGADO)
     try {
       const sala = createGameRoom(socket.id, nombreHost, maxJugadores || 5);
       socket.join(sala.codigo);
       logSala(sala.codigo, `🆕 Sala creada por ${nombreHost}`);
+
+      const stableId = userId || socket.id;
+      sessionUsers.set(socket.id, { userId: stableId, name: nombreHost });
+
+      // Guardar/actualizar usuario en Firestore (AGREGADO)
+      try { await upsertUser(stableId, nombreHost); } catch (e) { console.error('upsertUser', e); }
 
       socket.emit('sala_creada', {
         codigo: sala.codigo,
@@ -71,7 +100,7 @@ io.on('connection', (socket) => {
   // UNIRSE A SALA
   // client: socket.emit('unirse_sala', { codigo, nombre })
   // ─────────────────────────────────────
-  socket.on('unirse_sala', ({ codigo, nombre }) => {
+  socket.on('unirse_sala', async ({ codigo, nombre }) => { // <-- async (AGREGADO)
     const sala = getGameRoom(codigo);
     if (!sala) return socket.emit('error_unirse_sala', 'Sala no encontrada');
 
@@ -82,6 +111,12 @@ io.on('connection', (socket) => {
 
     socket.join(codigo);
     logSala(codigo, `➕ ${nombre} se unió`);
+
+    const stableId = userId || socket.id;
+    sessionUsers.set(socket.id, { userId: stableId, name: nombre });
+
+    // Guardar/actualizar usuario (AGREGADO)
+    try { await upsertUser(stableId, nombre); } catch (e) { console.error('upsertUser', e); }
 
     socket.emit('sala_unida', {
       codigo,
@@ -121,7 +156,7 @@ io.on('connection', (socket) => {
   // ─────────────────────────────────────
   // INICIAR PARTIDA
   // ─────────────────────────────────────
-  socket.on('iniciar_partida', ({ codigo }) => {
+  socket.on('iniciar_partida', async ({ codigo, tournamentId = null }) => { // <-- async + tournamentId (AGREGADO)
     const sala = getGameRoom(codigo);
     if (!sala) return;
 
@@ -131,6 +166,17 @@ io.on('connection', (socket) => {
 
     if (!sala.esHost(socket.id)) {
       return socket.emit('error_iniciar_partida', 'Solo el host puede iniciar la partida');
+    }
+
+    // Crear documento de partida en Firestore (AGREGADO)
+    try {
+      sala.gameId = await createGame({
+        code: sala.codigo,
+        tournamentId,
+        players: sala.jugadores, // {id, nombre}
+      });
+    } catch (e) {
+      console.error('createGame', e);
     }
 
     sala.iniciarPartida();
@@ -214,7 +260,7 @@ io.on('connection', (socket) => {
   // ─────────────────────────────────────
   // JUGAR CARTA
   // ─────────────────────────────────────
-  socket.on('jugar_carta', ({ codigo, carta }) => {
+  socket.on('jugar_carta', async ({ codigo, carta }) => { // <-- async (AGREGADO)
     const sala = getGameRoom(codigo);
     if (!sala) return;
 
@@ -236,6 +282,12 @@ io.on('connection', (socket) => {
         const detalle = sala.evaluarPredicciones();
         const puntajes = sala.getPuntajes();
 
+        // Guardar ronda en Firestore (AGREGADO)
+        if (sala.gameId) {
+          try { await recordRound(sala.gameId, sala.ronda, { detalle, puntajes }); }
+          catch (e) { console.error('recordRound', e); }
+        }
+
         // Mantener compatibilidad: 'fin_ronda' sigue enviando SOLO la lista de puntajes
         io.to(codigo).emit('fin_ronda', puntajes);
 
@@ -244,9 +296,44 @@ io.on('connection', (socket) => {
 
         const ganador = sala.jugadorGanador();
         if (ganador) {
+          // 👇 Tablero final de la partida ANTES de ir al ranking
+          const tableroFinal = sala.getPuntajes().sort((a,b)=> (b.puntos??0) - (a.puntos??0));
           io.to(codigo).emit('fin_partida', {
             ganador: { nombre: ganador.nombre, puntos: ganador.puntos },
+            tablero: tableroFinal,     // ← lista [{id,nombre,puntos}]
+            rondas: sala.ronda,
           });
+          // Cerrar partida en Firestore y emitir ranking (AGREGADO)
+          if (sala.gameId) {
+            try {
+              await finishGame({
+                gameId: sala.gameId,
+                winnerId: sessionUsers.get(ganador.id)?.userId || ganador.id,
+                players: sala.jugadores.map(j => ({
+                  id: sessionUsers.get(j.id)?.userId || j.id,  // 👈 estable para ranking
+                  nombre: j.nombre,
+                  puntos: j.puntos,
+                  prediccion: j.prediccion ?? 0,
+                  ganadas: j.manosGanadas ?? 0,
+                })),
+              });
+
+              // 👇 Ranking usando ranking_points (con alias para compat)
+              const topRaw = await getRanking(10);
+              const top = topRaw.map(r => ({
+                id: r.id,
+                name: r.name,
+                games_played: r.games_played,
+                games_won: r.games_won,
+                ranking_points: r.ranking_points ?? 0,
+                points_total: r.ranking_points ?? 0, // alias para UIs viejas
+              }));
+              io.emit('ranking_actualizado', top);
+            } catch (e) {
+              console.error('finishGame/getRanking', e);
+            }
+          }
+
           eliminarSala(codigo);
         } else {
           sala.prepararSiguienteRonda();

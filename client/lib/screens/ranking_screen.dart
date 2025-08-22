@@ -29,6 +29,12 @@ class RankingScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('🏆 Ranking Global'),
         centerTitle: true,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
+            child: const Text('Salir', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _getRanking(),

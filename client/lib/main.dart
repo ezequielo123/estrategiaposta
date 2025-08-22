@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'services/socket_service.dart'; // 👈 FALTA ESTO
+import 'services/socket_service.dart';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // generado por FlutterFire CLI
+import 'firebase_options.dart';
 
 import 'state/app_state.dart';
 import 'screens/app_wrapper.dart';
-import 'screens/ranking_screen.dart'; // 🏆 Agregado
+import 'screens/ranking_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,18 +32,16 @@ class EstrategiaApp extends StatelessWidget {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SocketService().registerContext(context);
     });
+
     return MaterialApp(
       title: 'Estrategia 🃏',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-
-      // 🧭 Ruta inicial
-      home: const AppWrapper(),
-
-      // 🌍 Rutas globales
       routes: {
-        '/ranking': (context) => const RankingScreen(), // 🏆 Ruta Ranking
+        '/ranking': (_) => const RankingScreen(),
+        '/home': (_) => const AppWrapper(),
       },
+      home: const AppWrapper(),
     );
   }
 }

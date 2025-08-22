@@ -3,9 +3,9 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform, debugPrint;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:flutter/material.dart';
-import '../state/app_state.dart';
 import 'package:provider/provider.dart';
 
+import '../state/app_state.dart';
 import '../config.dart'; // Debe exponer socketServerUrl
 
 class SocketService {
@@ -84,9 +84,19 @@ class SocketService {
   void off(String event) => getSocket().off(event);
   void emit(String event, [dynamic data]) => getSocket().emit(event, data);
 
-  // -------- API esperada por tus pantallas (posicionales) --------
+  /// Obtiene AppState desde el contexto registrado (main.dart)
+  AppState _appFromCtx() {
+    final ctx = _ctx;
+    if (ctx == null) {
+      throw StateError('SocketService.registerContext(context) debe llamarse en main.dart');
+    }
+    return ctx.read<AppState>();
+  }
 
-  // crearSala(nombre, maxJugadores, onCreada(Map), [onEstadoJugadores(List)])
+  // -------- API esperada por tus pantallas (compat + mejoras) --------
+
+  /// crearSala(nombre, maxJugadores, onCreada(Map), onEstadoJugadores(List))
+  /// Ahora SIEMPRE manda también el userId estable (AppState.userId).
   void crearSala(
     String nombre,
     int maxJugadores,
@@ -110,34 +120,64 @@ class SocketService {
       onEstadoJugadores(jugadores);
     });
 
+    // userId + nombre final
+    String? userId;
+    String nombreFinal = nombre.trim();
+    try {
+      final app = _appFromCtx();
+      userId = app.userId;
+      if (nombreFinal.isEmpty) {
+        nombreFinal = (app.userName ?? '').trim();
+      }
+    } catch (_) {
+      // si no hay contexto, seguimos solo con el nombre que llegó por parámetro
+    }
+    if (nombreFinal.isEmpty) nombreFinal = 'Jugador';
+
     if (!s.connected) s.connect();
     s.emit('crear_sala', {
-      'nombreHost': nombre,
+      'nombreHost': nombreFinal,
       'maxJugadores': maxJugadores,
+      if (userId != null) 'userId': userId, // 👈 id estable
     });
+  }
+
+  /// Atajo: crear sala usando el usuario persistente (sin pasar nombre).
+  void crearSalaAuto({
+    int maxJugadores = 5,
+    required void Function(Map<String, dynamic>) onCreada,
+    required void Function(List<Map<String, dynamic>>) onEstadoJugadores,
+  }) {
+    final app = _appFromCtx();
+    final nombre = (app.userName ?? 'Jugador');
+    crearSala(nombre, maxJugadores, onCreada, onEstadoJugadores);
   }
 
   void _setAppSocketId() {
     try {
       final id = _socket?.id ?? '';
       if (id.isEmpty) return;
-      if (_ctx == null) return; // si no registraste contexto, salimos
-      final app = Provider.of<AppState>(_ctx!, listen: false);
+      final ctx = _ctx;
+      if (ctx == null) return; // si no registraste contexto, salimos
+      final app = ctx.read<AppState>();
       app.setSocketId(id);
     } catch (_) {
       // no romper la app por temas de contexto
     }
   }
 
-
-  // unirseSala(nombre, codigo, onUnida(Map), [onEstadoJugadores(List)])
-  void unirseSala(String nombre, String codigo,
-      [void Function(dynamic)? onUnida,
-      void Function(dynamic)? onEstadoJugadores]) {
+  /// unirseSala(nombre, codigo, [onUnida], [onEstadoJugadores])
+  /// Ahora SIEMPRE manda también el userId estable (AppState.userId).
+  void unirseSala(
+    String nombre,
+    String codigo, [
+    void Function(dynamic)? onUnida,
+    void Function(dynamic)? onEstadoJugadores,
+  ]) {
     final s = getSocket();
 
     if (onUnida != null) {
-      // 🔁 Map: {codigo, jugadores, estado, esHost}
+      // 🔁 Map: {codigo, socketId, estado, esHost}
       s.once('sala_unida', (data) => onUnida(data));
     }
     if (onEstadoJugadores != null) {
@@ -145,11 +185,38 @@ class SocketService {
       s.once('estado_jugadores', (data) => onEstadoJugadores(data));
     }
 
+    // userId + nombre final
+    String? userId;
+    String nombreFinal = nombre.trim();
+    String code = codigo.trim().toUpperCase();
+    try {
+      final app = _appFromCtx();
+      userId = app.userId;
+      if (nombreFinal.isEmpty) {
+        nombreFinal = (app.userName ?? '').trim();
+      }
+    } catch (_) {
+      // seguimos igual si no hay contexto
+    }
+    if (nombreFinal.isEmpty) nombreFinal = 'Jugador';
+
     if (!s.connected) s.connect();
     s.emit('unirse_sala', {
-      'codigo': codigo,
-      'nombre': nombre,
+      'codigo': code,
+      'nombre': nombreFinal,
+      if (userId != null) 'userId': userId, // 👈 id estable
     });
+  }
+
+  /// Atajo: unirse usando usuario persistente (sin pasar nombre).
+  void unirseSalaAuto({
+    required String codigo,
+    void Function(dynamic)? onUnida,
+    void Function(dynamic)? onEstadoJugadores,
+  }) {
+    final app = _appFromCtx();
+    final nombre = (app.userName ?? 'Jugador');
+    unirseSala(nombre, codigo, onUnida, onEstadoJugadores);
   }
 
   void salirSala(String codigo) {

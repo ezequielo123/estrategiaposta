@@ -27,17 +27,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _maxJugadores = 4;
 
-  // ---------------- LÓGICA EXISTENTE (SIN CAMBIOS) ----------------
+  @override
+  void initState() {
+    super.initState();
+    // Prefill con el nombre persistido (si existe)
+    final app = context.read<AppState>();
+    nombreCtrl.text = (app.userName ?? app.nombreJugador);
+  }
 
-  void crearSala() {
+  @override
+  void dispose() {
+    nombreCtrl.dispose();
+    codigoCtrl.dispose();
+    super.dispose();
+  }
+
+  // ---------------- LÓGICA ----------------
+
+  Future<void> crearSala() async {
     final nombre = nombreCtrl.text.trim();
     if (nombre.isEmpty) {
       _mostrarError('⚠️ Ingresá tu nombre');
       return;
     }
 
-    final appState = Provider.of<AppState>(context, listen: false);
-    appState.setJugador(nombre);
+    final appState = context.read<AppState>();
+    await appState.setUserName(nombre); // 👈 persiste el nombre
 
     setState(() => _cargando = true);
 
@@ -74,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _onTapUnirse() {
+  Future<void> _onTapUnirse() async {
     final nombre = nombreCtrl.text.trim();
     final codigo = codigoCtrl.text.trim();
 
@@ -88,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final appState = context.read<AppState>();
-    appState.setJugador(nombre);
+    await appState.setUserName(nombre); // 👈 persiste el nombre
 
     setState(() => _cargando = true);
 
@@ -127,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // ---------------- UI NUEVA ----------------
+  // ---------------- UI ----------------
 
   @override
   Widget build(BuildContext context) {
@@ -416,6 +431,13 @@ class _HomeScreenState extends State<HomeScreen> {
           borderSide: const BorderSide(color: Colors.amberAccent),
         ),
       ),
+      onSubmitted: (v) async {
+        final t = v.trim();
+        if (t.isNotEmpty) {
+          await context.read<AppState>().setUserName(t);
+          _mostrarError('Nombre guardado');
+        }
+      },
     );
   }
 
