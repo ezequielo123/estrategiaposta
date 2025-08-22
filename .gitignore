@@ -29,3 +29,4 @@ client/.dart_tool/
 server/node_modules/
 server/.env
 server/firebase-sa.json
+server/firebase-sa.json
