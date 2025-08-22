@@ -31,3 +31,5 @@ server/.env
 server/firebase-sa.json
 server/firebase-sa.json
 cleaned-repo/
+estrategia-clean/
+cleaned-repo/
