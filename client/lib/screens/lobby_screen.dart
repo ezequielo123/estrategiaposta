@@ -7,6 +7,8 @@ import '../widgets/animated_glow.dart';
 import '../widgets/animated_pulse_button.dart';
 import '../screens/game_screen.dart';
 import 'home_screen.dart';
+import 'package:flutter/services.dart'; // Clipboard
+
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -109,10 +111,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
     });
   }
 
-  void _copiarCodigo(String codigo) {
+  Future<void> _copiarCodigo(String codigo) async {
     if (codigo.isEmpty) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text('Código copiado: $codigo')),
+    await Clipboard.setData(ClipboardData(text: codigo)); // 👈 copia real
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Código $codigo copiado'),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -261,10 +268,19 @@ class _Header extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            _CodePill(code: codigo, onCopy: () {
-              ScaffoldMessenger.maybeOf(context)
-                  ?.showSnackBar(SnackBar(content: Text('Código copiado: $codigo')));
-            }),
+            _CodePill(
+              code: codigo,
+              onCopy: () async {
+                if (codigo.isEmpty) return;
+                await Clipboard.setData(ClipboardData(text: codigo)); // 👈 copia real
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                  SnackBar(
+                    content: Text('Código copiado: $codigo'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),

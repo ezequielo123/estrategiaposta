@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import '../services/socket_service.dart';
 import '../state/app_state.dart';
 import 'lobby_screen.dart';
+import 'package:flutter/services.dart'; // Clipboard
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -69,6 +71,15 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<AppState>().setCodigoSala(codigo);
         context.read<AppState>().setEsHost(true);
 
+        // 👇 COPIAR AL PORTAPAPELES + SNACK
+        await Clipboard.setData(ClipboardData(text: codigo));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Código $codigo copiado'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
         // Guarda última sala para rejoin
         await context.read<AppState>().saveLastSession(codigo);
 
@@ -121,6 +132,15 @@ class _HomeScreenState extends State<HomeScreen> {
         final cod = (map['codigo'] as String?) ?? codigo;
         context.read<AppState>().setCodigoSala(cod);
         context.read<AppState>().setEsHost(false);
+
+        // 👇 COPIAR + SNACK
+        await Clipboard.setData(ClipboardData(text: cod));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Código $cod copiado'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
 
         // Guarda última sala para rejoin
         await context.read<AppState>().saveLastSession(cod);
