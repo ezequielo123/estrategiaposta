@@ -5,16 +5,21 @@ import 'package:uuid/uuid.dart';
 
 /// 📦 AppState
 /// Controla el estado global del jugador, sala y chat.
-/// Ahora incluye usuario persistente: userId + userName.
+/// Incluye usuario persistente (userId + userName) y última sala (rejoin).
 class AppState extends ChangeNotifier {
   // ───────── Usuario persistente ─────────
   bool _userLoaded = false;
   String? _userId;      // estable (UUID v4) – persiste en disco
   String? _userName;    // nombre visible – persiste en disco
-
   bool get userLoaded => _userLoaded;
   String? get userId => _userId;
   String? get userName => _userName;
+
+  // ───────── Última sesión (para rejoin) ─────────
+  String? _ultimoCodigoSala;
+  String? _ultimoNombre;
+  String? get ultimoCodigoSala => _ultimoCodigoSala;
+  String? get ultimoNombre => _ultimoNombre;
 
   // ───────── Estado de la sesión actual ─────────
   String _nombreJugador = '';
@@ -40,11 +45,14 @@ class AppState extends ChangeNotifier {
     _initUser();
   }
 
-  // Carga/crea userId y lee userName desde SharedPreferences
+  // Carga/crea userId y lee userName + última sala desde SharedPreferences
   Future<void> _initUser() async {
     final sp = await SharedPreferences.getInstance();
     _userId = sp.getString('userId');
     _userName = sp.getString('userName');
+
+    _ultimoCodigoSala = sp.getString('ultimoCodigoSala');
+    _ultimoNombre = sp.getString('ultimoNombre');
 
     if (_userId == null || _userId!.isEmpty) {
       _userId = const Uuid().v4();               // genera id estable
@@ -68,6 +76,29 @@ class AppState extends ChangeNotifier {
 
     // también actualiza el nombre en la sesión actual
     _nombreJugador = _userName!;
+    notifyListeners();
+  }
+
+  /// Guarda la última sala para el botón "Reunirme..."
+  Future<void> saveLastSession(String codigo) async {
+    final sp = await SharedPreferences.getInstance();
+    final nombre = (_userName ?? _nombreJugador).trim();
+    _ultimoCodigoSala = codigo;
+    _ultimoNombre = nombre.isEmpty ? null : nombre;
+    await sp.setString('ultimoCodigoSala', codigo);
+    if (_ultimoNombre != null) {
+      await sp.setString('ultimoNombre', _ultimoNombre!);
+    }
+    notifyListeners();
+  }
+
+  /// Limpia datos de última sala (si la sala ya no existe o falla rejoin)
+  Future<void> clearLastSession() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove('ultimoCodigoSala');
+    await sp.remove('ultimoNombre');
+    _ultimoCodigoSala = null;
+    _ultimoNombre = null;
     notifyListeners();
   }
 
@@ -147,7 +178,7 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  /// 🔄 Reset completo de estado global (no borra al usuario persistente)
+  /// 🔄 Reset completo de estado global (no borra al usuario persistente ni la última sala)
   void reset() {
     _codigoSala = '';
     _socketId = '';

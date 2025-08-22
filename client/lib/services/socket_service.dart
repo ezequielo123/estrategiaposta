@@ -65,6 +65,13 @@ class SocketService {
     _socket!.onError((e) {
       debugPrint('[Socket] error: $e');
     });
+    _socket!.on('error_unirse_sala', (data) {
+      _snack('Unirse: ${data ?? ''}');
+      try { _appFromCtx().clearLastSession(); } catch (_) {}
+    });
+    _socket!.on('error_crear_sala', (data) {
+      _snack('Crear sala: ${data ?? ''}');
+    });
 
     // Errores de dominio (server -> cliente)
     _socket!.on('error_sala', (data) => _snack('Sala: ${data ?? ''}'));

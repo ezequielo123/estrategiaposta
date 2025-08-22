@@ -30,9 +30,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Prefill con el nombre persistido (si existe)
+    // Prefill con el nombre y (opcional) el último código
     final app = context.read<AppState>();
     nombreCtrl.text = (app.userName ?? app.nombreJugador);
+    // Si querés también prellenar el campo de código:
+    // if ((app.ultimoCodigoSala ?? '').isNotEmpty) {
+    //   codigoCtrl.text = app.ultimoCodigoSala!;
+    // }
   }
 
   @override
@@ -59,11 +63,14 @@ class _HomeScreenState extends State<HomeScreen> {
     _socketService.crearSala(
       nombre,
       _maxJugadores,
-      (map) {
+      (map) async {
         final codigo = (map['codigo'] ?? '') as String;
 
         context.read<AppState>().setCodigoSala(codigo);
         context.read<AppState>().setEsHost(true);
+
+        // Guarda última sala para rejoin
+        await context.read<AppState>().saveLastSession(codigo);
 
         final jugadoresRaw = (map['jugadores'] as List?) ?? const [];
         final jugadores = jugadoresRaw
@@ -110,9 +117,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _socketService.unirseSala(
       nombre,
       codigo,
-      (map) {
-        context.read<AppState>().setCodigoSala(map['codigo'] as String);
+      (map) async {
+        final cod = (map['codigo'] as String?) ?? codigo;
+        context.read<AppState>().setCodigoSala(cod);
         context.read<AppState>().setEsHost(false);
+
+        // Guarda última sala para rejoin
+        await context.read<AppState>().saveLastSession(cod);
 
         final jugadoresRaw = (map['jugadores'] as List?) ?? const [];
         final jugadores = jugadoresRaw
@@ -138,6 +149,54 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Reunirme rápido a la última sala guardada
+  Future<void> _reunirme() async {
+    final app = context.read<AppState>();
+    final code = app.ultimoCodigoSala;
+    if (code == null || code.isEmpty) {
+      _mostrarError('No hay una sala reciente guardada');
+      return;
+    }
+
+    setState(() => _cargando = true);
+
+    // Usa el usuario persistente automáticamente
+    _socketService.unirseSalaAuto(
+      codigo: code,
+      onUnida: (map) async {
+        final cod = (map['codigo'] as String?) ?? code;
+        context.read<AppState>().setCodigoSala(cod);
+        context.read<AppState>().setEsHost(false);
+
+        // Refresca última sala
+        await context.read<AppState>().saveLastSession(cod);
+
+        final jugadoresRaw = (map['jugadores'] as List?) ?? const [];
+        final jugadores = jugadoresRaw
+            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+
+        setState(() {
+          _jugadores = jugadores;
+          _cargando = false;
+        });
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LobbyScreen()),
+        );
+      },
+      onEstadoJugadores: (jugadores) {
+        setState(() {
+          _jugadores = (jugadores as List?)
+                  ?.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+                  .toList() ??
+              <Map<String, dynamic>>[];
+        });
+      },
+    );
+  }
+
   void _mostrarError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
@@ -148,6 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 900;
     final heroHeight = isWide ? 360.0 : 280.0;
+    final app = context.watch<AppState>();
+    final ultimo = app.ultimoCodigoSala;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -314,6 +375,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildForm(BuildContext context) {
+    final app = context.watch<AppState>();
+    final ultimo = app.ultimoCodigoSala;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -367,6 +431,22 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+
+        // ⭐ Botón Reunirme a la última sala
+        if ((ultimo ?? '').isNotEmpty) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.meeting_room_outlined),
+            label: Text('Reunirme a la sala $ultimo'),
+            onPressed: _cargando ? null : _reunirme,
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: Colors.white.withOpacity(0.25)),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
 
         const SizedBox(height: 14),
         _ghostButton(
