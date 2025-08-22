@@ -30,3 +30,4 @@ server/node_modules/
 server/.env
 server/firebase-sa.json
 server/firebase-sa.json
+cleaned-repo/
