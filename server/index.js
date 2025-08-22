@@ -54,6 +54,10 @@ const io = new Server(server, {
   },
 });
 
+// Anti-spam carteles (cooldown por jugador)
+const lastCartelAt = new Map();
+
+
 // pequeño helper para armar snapshot de predicciones (completo)
 function snapshotEstadoPredicciones(sala) {
   return sala.jugadores.map(j => ({
@@ -71,17 +75,19 @@ io.on('connection', (socket) => {
   // CREAR SALA
   // client: socket.emit('crear_sala', { nombreHost, maxJugadores })
   // ─────────────────────────────────────
-  socket.on('crear_sala', async ({ nombreHost, maxJugadores }) => { // <-- async (AGREGADO)
+  socket.on('crear_sala', async (payload = {}) => {
     try {
+      const { nombreHost, maxJugadores, userId } = payload;
+
       const sala = createGameRoom(socket.id, nombreHost, maxJugadores || 5);
       socket.join(sala.codigo);
       logSala(sala.codigo, `🆕 Sala creada por ${nombreHost}`);
 
-      const stableId = userId || socket.id;
+      const stableId = userId || socket.id; // 👈 ahora sí
       sessionUsers.set(socket.id, { userId: stableId, name: nombreHost });
 
-      // Guardar/actualizar usuario en Firestore (AGREGADO)
-      try { await upsertUser(stableId, nombreHost); } catch (e) { console.error('upsertUser', e); }
+      try { await upsertUser(stableId, nombreHost); }
+      catch (e) { console.error('[upsertUser]', e); }
 
       socket.emit('sala_creada', {
         codigo: sala.codigo,
@@ -92,6 +98,7 @@ io.on('connection', (socket) => {
 
       io.to(sala.codigo).emit('estado_jugadores', sala.getEstadoRonda().jugadores);
     } catch (err) {
+      console.error('[crear_sala]', err);
       socket.emit('error_crear_sala', 'Error al crear la sala');
     }
   });
@@ -100,32 +107,67 @@ io.on('connection', (socket) => {
   // UNIRSE A SALA
   // client: socket.emit('unirse_sala', { codigo, nombre })
   // ─────────────────────────────────────
-  socket.on('unirse_sala', async ({ codigo, nombre }) => { // <-- async (AGREGADO)
-    const sala = getGameRoom(codigo);
-    if (!sala) return socket.emit('error_unirse_sala', 'Sala no encontrada');
+  socket.on('unirse_sala', async (payload = {}) => {
+    try {
+      const { codigo, nombre, userId } = payload;
 
-    const resultado = sala.agregarJugador(socket.id, nombre);
-    if (resultado === 'Sala llena') {
-      return socket.emit('error_unirse_sala', 'La sala está llena');
+      const sala = getGameRoom(codigo);
+      if (!sala) return socket.emit('error_unirse_sala', 'Sala no encontrada');
+
+      const resultado = sala.agregarJugador(socket.id, nombre);
+      if (resultado === 'Sala llena') {
+        return socket.emit('error_unirse_sala', 'La sala está llena');
+      }
+
+      socket.join(codigo);
+      logSala(codigo, `➕ ${nombre} se unió`);
+
+      const stableId = userId || socket.id; // 👈 ahora sí
+      sessionUsers.set(socket.id, { userId: stableId, name: nombre });
+
+      try { await upsertUser(stableId, nombre); }
+      catch (e) { console.error('[upsertUser]', e); }
+
+      socket.emit('sala_unida', {
+        codigo,
+        socketId: socket.id,
+        estado: sala.getEstadoRonda(),
+        esHost: false,
+      });
+
+      io.to(codigo).emit('estado_jugadores', sala.getEstadoRonda().jugadores);
+    } catch (err) {
+      console.error('[unirse_sala]', err);
+      socket.emit('error_unirse_sala', 'Error al unirse a la sala');
     }
+  });
 
-    socket.join(codigo);
-    logSala(codigo, `➕ ${nombre} se unió`);
+  // ─────────────────────────────────────
+  // CARTELES DE MESA (emotes rápidos)
+  // client: socket.emit('gritar_cartel', { codigo, texto, tipo? })
+  // server:  io.to(codigo).emit('cartel_mesa', { from:{id,nombre}, texto, tipo, ts })
+  // ─────────────────────────────────────
+  socket.on('gritar_cartel', ({ codigo, texto, tipo }) => {
+    const sala = getGameRoom(codigo);
+    if (!sala) return socket.emit('error_cartel', 'Sala no encontrada');
 
-    const stableId = userId || socket.id;
-    sessionUsers.set(socket.id, { userId: stableId, name: nombre });
+    const now = Date.now();
+    const prev = lastCartelAt.get(socket.id) || 0;
+    if (now - prev < 1500) { // 1.5s cooldown
+      return io.to(socket.id).emit('error_cartel', 'Muy rápido… esperá un segundo');
+    }
+    lastCartelAt.set(socket.id, now);
 
-    // Guardar/actualizar usuario (AGREGADO)
-    try { await upsertUser(stableId, nombre); } catch (e) { console.error('upsertUser', e); }
+    const jugador = sala.getJugador(socket.id);
+    const clean = String(texto || '').substring(0, 64);
+    const kind  = String(tipo || '');
 
-    socket.emit('sala_unida', {
-      codigo,
-      socketId: socket.id,
-      estado: sala.getEstadoRonda(),
-      esHost: false,
+    io.to(codigo).emit('cartel_mesa', {
+      from: { id: socket.id, nombre: jugador?.nombre || 'Jugador' },
+      texto: clean,
+      tipo: kind, // ej: "pasa", "lleve" (o vacío)
+      ts: now
     });
-
-    io.to(codigo).emit('estado_jugadores', sala.getEstadoRonda().jugadores);
   });
 
   // ─────────────────────────────────────
@@ -403,6 +445,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     let codigoSala = null;
     let jugadorEliminado = null;
+    lastCartelAt.delete(socket.id);
 
     for (const [codigo, sala] of Object.entries(salas)) {
       const index = sala.jugadores.findIndex(j => j.id === socket.id);

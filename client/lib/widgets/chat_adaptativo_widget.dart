@@ -18,7 +18,7 @@ class ChatAdaptativoWidget extends StatefulWidget {
 
 class _ChatAdaptativoWidgetState extends State<ChatAdaptativoWidget> {
   // UI
-  static const double _kHeaderH = 44;   // altura preferida (sin forzar)
+  static const double _kHeaderH = 40;   // altura preferida (sin forzar)
   static const double _kExpandedH = 280;
 
   final msgCtrl = TextEditingController();
@@ -30,7 +30,7 @@ class _ChatAdaptativoWidgetState extends State<ChatAdaptativoWidget> {
 
   // Audio
   final _player = AudioPlayer();
-  final AssetSource _source = AssetSource('sounds/notify.mp3'); // ← sin const
+  final AssetSource _source = AssetSource('sounds/notify.wav'); // ← sin const
   bool _audioPrimed = false;
 
   // Socket
@@ -135,7 +135,7 @@ class _ChatAdaptativoWidgetState extends State<ChatAdaptativoWidget> {
           ),
           child: Column(
             // 👉 Para que el header se adapte al alto disponible
-            mainAxisSize: MainAxisSize.max,
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Header (alto flexible: sin height fijo para evitar overflow)
               InkWell(

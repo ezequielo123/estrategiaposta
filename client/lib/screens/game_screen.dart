@@ -1,3 +1,4 @@
+// lib/screens/game_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +14,7 @@ import '../widgets/player_seat.dart';
 import '../widgets/mesa_central.dart';
 import '../widgets/mano_jugador.dart';
 import '../widgets/chat_adaptativo_widget.dart';
-import '../services/ranking_service.dart';
+import '../services/ranking_service.dart'; // ya no se usa al final, pero lo dejo
 
 // arriba de GameScreen
 import '../widgets/scoreboard_panel.dart';
@@ -21,7 +22,10 @@ import '../widgets/prediction_bar.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'final_score_screen.dart';
 
+import '../widgets/turn_halo.dart';
+import '../widgets/turn_chip.dart';
 
+import '../widgets/cartel_mesa_overlay.dart';
 
 class GameScreen extends StatefulWidget {
   final Map<String, dynamic> estadoRonda;
@@ -41,6 +45,9 @@ class _GameScreenState extends State<GameScreen> {
   final socketService = SocketService();
   final _sfx = AudioPlayer();
 
+  // Carteles (emotes) en mesa
+  final Map<String, Timer> _cartelTimers = {};
+  final List<CartelVM> _cartelesActivos = [];
 
   // 🔮 Predicción
   int? prediccion;
@@ -77,12 +84,16 @@ class _GameScreenState extends State<GameScreen> {
   bool _esMiTurnoJuego = false;
   String _turnoJuegoNombre = '';
 
+  // Demora visual entre bazas
+  Timer? _bazaDelayTimer;
+  List<Jugada>? _deferredJugadas;
+
   @override
   void initState() {
     super.initState();
     final socket = socketService.getSocket();
     final appState = Provider.of<AppState>(context, listen: false);
-    
+
     _sfx.setVolume(0.7);
 
     // Estado inicial
@@ -108,6 +119,7 @@ class _GameScreenState extends State<GameScreen> {
       'error_prediccion',
       'error_jugada',
       'chat_mensaje',
+      'fin_mano', // ⬅️ nuevo
     ]) {
       socket.off(ev);
     }
@@ -222,6 +234,7 @@ class _GameScreenState extends State<GameScreen> {
                 ? data['jugadas']
                 : const [];
 
+        // Parseo igual que antes
         final parsed = <Jugada>[];
         for (final elem in listaDynamic) {
           if (elem is! Map) continue;
@@ -230,7 +243,7 @@ class _GameScreenState extends State<GameScreen> {
               ? (m['jugador']['nombre'] ?? '').toString()
               : (m['jugador'] ?? '').toString();
 
-        final c = m['carta'];
+          final c = m['carta'];
           if (c is! Map) continue;
 
           parsed.add(
@@ -244,13 +257,44 @@ class _GameScreenState extends State<GameScreen> {
           );
         }
 
-        // si en esta actualización aparece mi carta, recién ahí la saco
-        final myName =
-            Provider.of<AppState>(context, listen: false).nombreJugador;
+        // Detectar si ES la PRIMERA carta de la SIGUIENTE baza
+        final nPlayers = _jugadores.length;
+        final wasComplete = (jugadasActuales.length == nPlayers) && nPlayers > 0;
+        final isFirstOfNextTrick = (parsed.length == 1) && wasComplete;
+
+        if (isFirstOfNextTrick) {
+          // ⏱️ Demoramos 1s el reemplazo de la mesa (para que se vea la baza anterior completa)
+          _deferredJugadas = parsed;
+          _bazaDelayTimer?.cancel();
+          _bazaDelayTimer = Timer(const Duration(seconds: 1), () {
+            if (!mounted) return;
+            final myName = Provider.of<AppState>(context, listen: false).nombreJugador;
+            final misJugadas = (_deferredJugadas ?? parsed).where((j) => j.jugador == myName);
+
+            setState(() {
+              jugadasActuales = _deferredJugadas ?? parsed;
+              // Si en esta nueva lista aparece mi carta (primer jugador fui yo), la removemos
+              for (final j in misJugadas) {
+                cartasJugador.removeWhere(
+                  (c) => c.numero == j.carta.numero && c.palo == j.carta.palo,
+                );
+              }
+            });
+            _deferredJugadas = null;
+          });
+
+          // No actualizamos inmediatamente para mantener visibles las cartas anteriores
+          return;
+        }
+
+        // Caso normal: actualización inmediata (misma baza en curso o ya con 2+ cartas de la nueva)
+        _bazaDelayTimer?.cancel();
+        final myName = Provider.of<AppState>(context, listen: false).nombreJugador;
         final misJugadas = parsed.where((j) => j.jugador == myName);
 
         setState(() {
           jugadasActuales = parsed;
+          // si en esta actualización aparece mi carta, recién ahí la saco
           for (final j in misJugadas) {
             cartasJugador.removeWhere(
               (c) => c.numero == j.carta.numero && c.palo == j.carta.palo,
@@ -260,6 +304,19 @@ class _GameScreenState extends State<GameScreen> {
       } catch (e) {
         debugPrint('❌ Error en actualizar_tablero: $e');
       }
+    });
+
+    // Al cerrar una baza: dejar visible 1s la mesa antes de limpiar (útil en mano de 1 carta)
+    socket.on('fin_mano', (_) {
+      _bazaDelayTimer?.cancel();
+      _bazaDelayTimer = Timer(const Duration(seconds: 1), () {
+        if (!mounted) return;
+
+        // Si seguimos mostrando la baza completa anterior, limpiamos la mesa
+        if (_jugadores.isNotEmpty && jugadasActuales.length == _jugadores.length) {
+          setState(() => jugadasActuales = []);
+        }
+      });
     });
 
     // Turno de jugar
@@ -279,6 +336,17 @@ class _GameScreenState extends State<GameScreen> {
           _esMiTurnoJuego = (id == app.socketId);
           _turnoJuegoNombre = nombre;
         });
+
+        // ✨ aviso sutil cuando arranca el turno de jugar
+        final msg = _esMiTurnoJuego ? '¡Es tu turno!' : 'Turno de $nombre';
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
       } catch (_) {}
     });
 
@@ -296,11 +364,8 @@ class _GameScreenState extends State<GameScreen> {
         // Si el mensaje NO es mío -> sonido + notificación visual sutil
         final myId = Provider.of<AppState>(context, listen: false).socketId;
         if (sid != myId) {
-          // 🔊 sonido
-          await _sfx.stop(); // evita solaparse si llegan varios
-          await _sfx.play(AssetSource('sounds/notify.wav')); // o 'sounds/notify.mp3'
-
-          // 🔔 aviso visual
+          await _sfx.stop();
+          await _sfx.play(AssetSource('sounds/notify.wav'));
           if (mounted) {
             ScaffoldMessenger.maybeOf(context)?.showSnackBar(
               SnackBar(
@@ -369,7 +434,7 @@ class _GameScreenState extends State<GameScreen> {
         final ganadorMap = Map<String, dynamic>.from(m['ganador'] ?? const {});
         final nombreGanador = (ganadorMap['nombre'] ?? '').toString();
 
-        // tablero: [{id,nombre,puntos}] - puede no venir si el server es viejo
+        // tablero: [{id,nombre,puntos}]
         final tablero = (m['tablero'] as List?)
                 ?.map((e) => Map<String, dynamic>.from(e as Map))
                 .toList() ??
@@ -379,18 +444,13 @@ class _GameScreenState extends State<GameScreen> {
 
         if (mounted) {
           setState(() {
-            ganador = nombreGanador; // si usás este estado en la UI actual
+            ganador = nombreGanador;
           });
         }
-
-        // 🔕 Importante:
-        // Ya NO llamamos RankingService.registrarGanador(nombre, puntos)
-        // El ranking ahora lo actualiza el server en Firestore (3 por victoria).
 
         if (!mounted) return;
 
         if (tablero.isNotEmpty) {
-          // ✅ Ruta nueva: mostramos tablero final antes del ranking
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => FinalScoreScreen(
@@ -401,7 +461,6 @@ class _GameScreenState extends State<GameScreen> {
             ),
           );
         } else {
-          // ♻️ Compatibilidad con payload viejo (sin tablero):
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) Navigator.pushReplacementNamed(context, '/ranking');
           });
@@ -411,7 +470,7 @@ class _GameScreenState extends State<GameScreen> {
       }
     });
 
-    // Estado de predicciones (lista de jugadores con prediccion/puntos)
+    // Estado de predicciones
     socket.on('estado_predicciones', (data) {
       try {
         final lista = (data as List?) ?? const [];
@@ -435,12 +494,32 @@ class _GameScreenState extends State<GameScreen> {
       }
     });
 
-    // Compat cierre de predicciones
+    // ⛔️ Cerrar predicciones: frenar countdown + ocultar UI
     socket.on('predicciones_completas', (_) {
-      setState(() => prediccionEnviada = true);
+      _stopCountdown();
+      if (!mounted) return;
+      setState(() {
+        prediccionEnviada = true;
+        _esMiTurnoPred = false;
+        _turnoPredId = '';
+        _turnoNombre = '';
+        _opcionesPred = [];
+        _countdown = 0;
+      });
     });
+
+    // (Compat) algunos servers envían 'predicciones_cerradas'
     socket.on('predicciones_cerradas', (_) {
-      setState(() => prediccionEnviada = true);
+      _stopCountdown();
+      if (!mounted) return;
+      setState(() {
+        prediccionEnviada = true;
+        _esMiTurnoPred = false;
+        _turnoPredId = '';
+        _turnoNombre = '';
+        _opcionesPred = [];
+        _countdown = 0;
+      });
     });
 
     // Turno de predicción (+ fallback)
@@ -457,10 +536,10 @@ class _GameScreenState extends State<GameScreen> {
         }
         final esMio = turnoId == appState.socketId;
         setState(() {
-          _turnoPredId = turnoId;                 // ⟵ guardamos quién predice
+          _turnoPredId = turnoId;
           _esMiTurnoPred = esMio;
           _turnoNombre = nombre;
-          _countdown = _COUNTDOWN_TOTAL;          // ⟵ 15s
+          _countdown = _COUNTDOWN_TOTAL;
           prediccion = null;
           _opcionesPred = [];
           prediccionEnviada = false;
@@ -495,7 +574,7 @@ class _GameScreenState extends State<GameScreen> {
       }
     });
 
-    // Opciones válidas (List<int> o {opciones:[], jugadorId})
+    // Opciones válidas
     socket.on('opciones_validas_prediccion', (data) {
       try {
         List list;
@@ -514,7 +593,7 @@ class _GameScreenState extends State<GameScreen> {
       }
     });
 
-    // Autopredicción informativa (además del snack local en _autoPrediccion)
+    // Autopredicción informativa
     socket.on('prediccion_auto', (autoVal) {
       final val = (autoVal is num) ? autoVal.toInt() : autoVal;
       if (!mounted) return;
@@ -536,6 +615,29 @@ class _GameScreenState extends State<GameScreen> {
       ScaffoldMessenger.maybeOf(context)
           ?.showSnackBar(SnackBar(content: Text(msg.toString())));
       setState(() => _esMiTurnoJuego = true); // reintentar
+    });
+
+    // Carteles que llegan del server
+    socket.on('cartel_mesa', (data) {
+      try {
+        final m = Map<String, dynamic>.from(data as Map);
+        final from = (m['from'] is Map) ? Map<String, dynamic>.from(m['from']) : const {};
+        final autor = (from['nombre'] ?? '').toString();
+        final texto = (m['texto'] ?? '').toString();
+        final tipo  = (m['tipo'] ?? '').toString();
+        final id    = '${DateTime.now().microsecondsSinceEpoch}-${from['id'] ?? ''}';
+
+        setState(() {
+          _cartelesActivos.add(CartelVM(id: id, texto: texto, tipo: tipo, autor: autor));
+        });
+
+        _cartelTimers[id]?.cancel();
+        _cartelTimers[id] = Timer(const Duration(milliseconds: 2500), () {
+          if (!mounted) return;
+          setState(() => _cartelesActivos.removeWhere((c) => c.id == id));
+          _cartelTimers.remove(id);
+        });
+      } catch (_) {}
     });
   }
 
@@ -584,11 +686,9 @@ class _GameScreenState extends State<GameScreen> {
     }
     if (choice != null) {
       setState(() => prediccion = choice);
-      // Feedback local inmediato
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(content: Text('Se asignó automáticamente tu predicción: $choice')),
       );
-      // 👇 Envío forzado sin exigir opciones recibidas
       enviarPrediccion(force: true);
     }
   }
@@ -604,7 +704,6 @@ class _GameScreenState extends State<GameScreen> {
     if (!force) {
       if (!_esMiTurnoPred || !dentroDeTiempo || !opcionValida) return;
     } else {
-      // En modo force: solo exigimos que sea mi turno
       if (!_esMiTurnoPred) return;
     }
 
@@ -626,12 +725,15 @@ class _GameScreenState extends State<GameScreen> {
       'numero': carta.numero,
       'palo': carta.palo,
     });
-    // no removemos aquí; esperamos 'actualizar_tablero'
   }
 
   @override
   void dispose() {
-    _sfx.dispose();   // ⟵ libera el reproductor
+    _bazaDelayTimer?.cancel();
+    for (final t in _cartelTimers.values) { t.cancel(); }
+    _cartelTimers.clear();
+
+    _sfx.dispose();
     _stopCountdown();
     super.dispose();
   }
@@ -649,11 +751,15 @@ class _GameScreenState extends State<GameScreen> {
       Offset(20, size.height * 0.25),
     ];
 
+    final app = context.watch<AppState>();
+    final esMiTurno = app.esMiTurno;
+    final nombreTurno = app.nombresPorSocket[app.turnoJugadorId ?? ''] ?? '...';
+
     return Scaffold(
       backgroundColor: Colors.green[900],
       body: Stack(
         children: [
-          // Asientos (con anillo de progreso en turno de predicción)
+          // Asientos (mantengo tu PlayerSeat tal cual)
           for (int i = 0; i < _jugadores.length && i < 5; i++)
             PlayerSeat(
               nombre: (_jugadores[i]['nombre'] ?? '').toString(),
@@ -668,10 +774,22 @@ class _GameScreenState extends State<GameScreen> {
                   ? _countdown
                   : null,
               segsTotalesPred: _COUNTDOWN_TOTAL,
+              enTurnoJuego: (context.read<AppState>().turnoJugadorId ?? '') == ((_jugadores[i]['id'] ?? '').toString()),
             ),
 
-          // Mesa central
-          MesaCentral(jugadas: jugadasActuales),
+          // Mesa central (agrandada)
+          Builder(builder: (context) {
+            final w = MediaQuery.of(context).size.width;
+            final scaleMesa = w >= 1100 ? 1.15 : w >= 800 ? 1.12 : 1.08;
+            return Center(
+              child: Transform.scale(
+                scale: scaleMesa,
+                child: MesaCentral(jugadas: jugadasActuales),
+              ),
+            );
+          }),
+          // Overlay de carteles/emotes en mesa (encima de la mesa)
+          CartelMesaOverlay(carteles: _cartelesActivos),
 
           // 🧮 Scoreboard elegante
           Positioned(
@@ -686,7 +804,6 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
 
-
           // UI de predicción (arriba, compacta)
           if (!prediccionEnviada)
             PredictionBar(
@@ -697,9 +814,9 @@ class _GameScreenState extends State<GameScreen> {
               seleccion: prediccion,
               onSelect: (i) => setState(() => prediccion = i),
               onEnviar: () => enviarPrediccion(),
-          ),
+            ),
 
-          // Mano del jugador con animación (al final para que quede por encima)
+          // Mano del jugador (agrandada + animación)
           AnimatedSlide(
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeOut,
@@ -707,16 +824,44 @@ class _GameScreenState extends State<GameScreen> {
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 350),
               opacity: _dealing ? 0.0 : 1.0,
-              child: ManoJugador(
-                cartas: cartasJugador,
-                onCartaSeleccionada: (c) => jugarCarta(c),
-              ),
+              child: Builder(builder: (context) {
+                final w = MediaQuery.of(context).size.width;
+                final scaleHand = w >= 1100 ? 1.28 : w >= 800 ? 1.22 : 1.16;
+
+                return Transform.scale(
+                  scale: scaleHand,
+                  alignment: Alignment.bottomCenter,
+                  child: TurnHalo(
+                    active: esMiTurno,
+                    intensity: 1.2,
+                    child: ManoJugador(
+                      cartas: cartasJugador,
+                      onCartaSeleccionada: (c) => jugarCarta(c),
+                    ),
+                  ),
+                );
+              }),
             ),
           ),
 
           // Esperando
           if (esperando)
             const Center(child: CircularProgressIndicator(color: Colors.white)),
+
+
+          // Botones de cartel rápido
+          Positioned(
+            right: 12,
+            bottom: 140, // que no tape tu mano
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _cartelBtn('Pasaaaaaaa', tipo: 'pasa', color: const Color(0xFF0BD3A0)),
+                const SizedBox(height: 8),
+                _cartelBtn('Que se la ieveeeeee', tipo: 'lleve', color: const Color(0xFFFFC107)),
+              ],
+            ),
+          ),
 
           // Chat
           ChatAdaptativoWidget(
@@ -726,12 +871,42 @@ class _GameScreenState extends State<GameScreen> {
             },
           ),
 
+          // 🟡 Chip sutil de turno, arriba centrado
+          Positioned(
+            top: 12,
+            left: 0,
+            right: 0,
+            child: TurnChip(
+              esMiTurno: esMiTurno,
+              texto: esMiTurno ? '¡Es tu turno!' : 'Turno de $nombreTurno',
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // Scoreboard widget
+  Widget _cartelBtn(String texto, {required String tipo, required Color color}) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.black,
+        elevation: 3,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      onPressed: () {
+        final app = Provider.of<AppState>(context, listen: false);
+        SocketService().enviarCartel(app.codigoSala, texto, tipo: tipo);
+      },
+      child: Text(
+        texto,
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+
+  // (opcional) tu scoreboard viejo, lo dejo por si lo usás en otro lado
   Widget _scoreboard({
     required List<Map<String, dynamic>> jugadores,
     required Map<String, int?> predicciones,

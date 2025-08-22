@@ -41,6 +41,13 @@ class AppState extends ChangeNotifier {
   Map<String, String> get mensajesJugador => _mensajesJugador;
   Map<String, String> get nombresPorSocket => _nombresPorSocket;
 
+  // --- Turno actual ---
+  String? _turnoJugadorId;
+  String? get turnoJugadorId => _turnoJugadorId;
+
+  // ¿Es mi turno? (compara con tu socketId actual)
+  bool get esMiTurno => _turnoJugadorId != null && _turnoJugadorId == _socketId;
+
   AppState() {
     _initUser();
   }
@@ -121,6 +128,11 @@ class AppState extends ChangeNotifier {
       setUserName(nombre); // persiste y notifica
       return;
     }
+    notifyListeners();
+  }
+
+  void setTurnoJugadorId(String? id) {
+    _turnoJugadorId = id;
     notifyListeners();
   }
 

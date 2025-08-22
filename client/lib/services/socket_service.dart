@@ -65,6 +65,13 @@ class SocketService {
     _socket!.onError((e) {
       debugPrint('[Socket] error: $e');
     });
+
+    // Errores de dominio (server -> cliente)
+    _socket!.on('error_sala', (data) => _snack('Sala: ${data ?? ''}'));
+    _socket!.on('error_prediccion', (data) => _snack('Predicción: ${data ?? ''}'));
+    _socket!.on('error_jugada', (data) => _snack('Jugada: ${data ?? ''}'));
+
+    // Nuevos: feedback y limpieza de última sala si falla
     _socket!.on('error_unirse_sala', (data) {
       _snack('Unirse: ${data ?? ''}');
       try { _appFromCtx().clearLastSession(); } catch (_) {}
@@ -73,10 +80,28 @@ class SocketService {
       _snack('Crear sala: ${data ?? ''}');
     });
 
-    // Errores de dominio (server -> cliente)
-    _socket!.on('error_sala', (data) => _snack('Sala: ${data ?? ''}'));
-    _socket!.on('error_prediccion', (data) => _snack('Predicción: ${data ?? ''}'));
-    _socket!.on('error_jugada', (data) => _snack('Jugada: ${data ?? ''}'));
+    // 🔔 Turno de jugar → actualiza AppState y (opcional) ping sutil si es tu turno
+    _socket!.on('turno_jugar', (data) {
+      try {
+        // data: { id, nombre } o solo id
+        final id = (data is Map && data['id'] != null)
+            ? data['id'].toString()
+            : data.toString();
+
+        // ✔️ guardar en AppState quién juega ahora
+        _appFromCtx().setTurnoJugadorId(id);
+
+        // 🔔 opcional: si es tu turno, podrías disparar un ping
+        try {
+          final app = _appFromCtx();
+          if (app.socketId == id) {
+            // TODO: AudioService().pingTurno(); // si tenés un servicio de audio
+          }
+        } catch (_) {}
+      } catch (e) {
+        debugPrint('[Socket] turno_jugar parse error: $e');
+      }
+    });
 
     _created = true;
 
@@ -171,6 +196,17 @@ class SocketService {
     } catch (_) {
       // no romper la app por temas de contexto
     }
+  }
+
+  // Enviar “cartel de mesa” (emote)
+  void enviarCartel(String codigo, String texto, {String? tipo}) {
+    final s = getSocket();
+    if (!s.connected) s.connect();
+    s.emit('gritar_cartel', {
+      'codigo': codigo,
+      'texto': texto,
+      'tipo' : tipo, // ej: 'pasa', 'lleve'
+    });
   }
 
   /// unirseSala(nombre, codigo, [onUnida], [onEstadoJugadores])
