@@ -28,3 +28,4 @@ client/.dart_tool/
 # Server deps/env
 server/node_modules/
 server/.env
+server/firebase-sa.json
