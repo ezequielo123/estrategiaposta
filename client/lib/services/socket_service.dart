@@ -1,6 +1,6 @@
 // lib/services/socket_service.dart
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform, debugPrint;
+    show kIsWeb, debugPrint;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -36,12 +36,11 @@ class SocketService {
       socketServerUrl,
       IO.OptionBuilder()
           .setTransports(transports)
-          .setPath('/socket.io')   // explícito
+          .setPath('/socket.io')   // explícito (coincide con tu server)
           .disableAutoConnect()    // conectamos luego de registrar listeners
           .enableReconnection()
           .setReconnectionDelay(800)
           .setReconnectionAttempts(20)
-          // NO usar forceNew: genera managers duplicados y desconexiones raras
           .build(),
     );
 
@@ -71,16 +70,16 @@ class SocketService {
     _socket!.on('error_prediccion', (data) => _snack('Predicción: ${data ?? ''}'));
     _socket!.on('error_jugada', (data) => _snack('Jugada: ${data ?? ''}'));
 
-    // Nuevos: feedback y limpieza de última sala si falla
+    // Feedback de errores de sala
     _socket!.on('error_unirse_sala', (data) {
       _snack('Unirse: ${data ?? ''}');
-      try { _appFromCtx().clearLastSession(); } catch (_) {}
+      // (quitado clearLastSession para no depender de AppState custom)
     });
     _socket!.on('error_crear_sala', (data) {
       _snack('Crear sala: ${data ?? ''}');
     });
 
-    // 🔔 Turno de jugar → actualiza AppState y (opcional) ping sutil si es tu turno
+    // 🔔 Turno de jugar → actualiza AppState (para halos/chips)
     _socket!.on('turno_jugar', (data) {
       try {
         // data: { id, nombre } o solo id
@@ -88,16 +87,15 @@ class SocketService {
             ? data['id'].toString()
             : data.toString();
 
-        // ✔️ guardar en AppState quién juega ahora
         _appFromCtx().setTurnoJugadorId(id);
 
-        // 🔔 opcional: si es tu turno, podrías disparar un ping
-        try {
-          final app = _appFromCtx();
-          if (app.socketId == id) {
-            // TODO: AudioService().pingTurno(); // si tenés un servicio de audio
-          }
-        } catch (_) {}
+        // Opcional: si es tu turno podrías disparar un sonido leve
+        // try {
+        //   final app = _appFromCtx();
+        //   if (app.socketId == id) {
+        //     AudioService.instance.pingTurno();
+        //   }
+        // } catch (_) {}
       } catch (e) {
         debugPrint('[Socket] turno_jugar parse error: $e');
       }
@@ -118,17 +116,16 @@ class SocketService {
 
   /// Obtiene AppState desde el contexto registrado (main.dart)
   AppState _appFromCtx() {
-    final ctx = _ctx;
-    if (ctx == null) {
+    if (_ctx == null) {
       throw StateError('SocketService.registerContext(context) debe llamarse en main.dart');
     }
-    return ctx.read<AppState>();
+    return Provider.of<AppState>(_ctx!, listen: false);
   }
 
   // -------- API esperada por tus pantallas (compat + mejoras) --------
 
   /// crearSala(nombre, maxJugadores, onCreada(Map), onEstadoJugadores(List))
-  /// Ahora SIEMPRE manda también el userId estable (AppState.userId).
+  /// Envía también el userId estable (AppState.userId) si existe.
   void crearSala(
     String nombre,
     int maxJugadores,
@@ -153,11 +150,11 @@ class SocketService {
     });
 
     // userId + nombre final
-    String? userId;
+    String? uid;
     String nombreFinal = nombre.trim();
     try {
       final app = _appFromCtx();
-      userId = app.userId;
+      uid = app.userId;
       if (nombreFinal.isEmpty) {
         nombreFinal = (app.userName ?? '').trim();
       }
@@ -170,7 +167,7 @@ class SocketService {
     s.emit('crear_sala', {
       'nombreHost': nombreFinal,
       'maxJugadores': maxJugadores,
-      'userId': app.userId,   // 👈
+      if (uid != null) 'userId': uid, // 👈 estable
     });
   }
 
@@ -189,9 +186,7 @@ class SocketService {
     try {
       final id = _socket?.id ?? '';
       if (id.isEmpty) return;
-      final ctx = _ctx;
-      if (ctx == null) return; // si no registraste contexto, salimos
-      final app = ctx.read<AppState>();
+      final app = _appFromCtx();
       app.setSocketId(id);
     } catch (_) {
       // no romper la app por temas de contexto
@@ -210,7 +205,7 @@ class SocketService {
   }
 
   /// unirseSala(nombre, codigo, [onUnida], [onEstadoJugadores])
-  /// Ahora SIEMPRE manda también el userId estable (AppState.userId).
+  /// Envía también el userId estable (AppState.userId) si existe.
   void unirseSala(
     String nombre,
     String codigo, [
@@ -229,12 +224,12 @@ class SocketService {
     }
 
     // userId + nombre final
-    String? userId;
+    String? uid;
     String nombreFinal = nombre.trim();
     String code = codigo.trim().toUpperCase();
     try {
       final app = _appFromCtx();
-      userId = app.userId;
+      uid = app.userId;
       if (nombreFinal.isEmpty) {
         nombreFinal = (app.userName ?? '').trim();
       }
@@ -247,7 +242,7 @@ class SocketService {
     s.emit('unirse_sala', {
       'codigo': code,
       'nombre': nombreFinal,
-      'userId': app.userId,   // 👈
+      if (uid != null) 'userId': uid, // 👈 estable
     });
   }
 
