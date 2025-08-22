@@ -73,21 +73,20 @@ io.on('connection', (socket) => {
 
   // ─────────────────────────────────────
   // CREAR SALA
-  // client: socket.emit('crear_sala', { nombreHost, maxJugadores })
+  // client: socket.emit('crear_sala', { nombreHost, maxJugadores, userId })
   // ─────────────────────────────────────
   socket.on('crear_sala', async (payload = {}) => {
     try {
-      const { nombreHost, maxJugadores, userId } = payload;
-
+      const { nombreHost, maxJugadores, userId: uidFromClient } = payload; // 👈 toma userId si viene
       const sala = createGameRoom(socket.id, nombreHost, maxJugadores || 5);
       socket.join(sala.codigo);
       logSala(sala.codigo, `🆕 Sala creada por ${nombreHost}`);
 
-      const stableId = userId || socket.id; // 👈 ahora sí
+      const stableId = uidFromClient || socket.id;               // 👈 estable si lo envía el cliente
       sessionUsers.set(socket.id, { userId: stableId, name: nombreHost });
+      logJugador(socket.id, `🔐 userId estable set: ${stableId}`);
 
-      try { await upsertUser(stableId, nombreHost); }
-      catch (e) { console.error('[upsertUser]', e); }
+      try { await upsertUser(stableId, nombreHost); } catch (e) { console.error('[upsertUser]', e); }
 
       socket.emit('sala_creada', {
         codigo: sala.codigo,
@@ -98,48 +97,41 @@ io.on('connection', (socket) => {
 
       io.to(sala.codigo).emit('estado_jugadores', sala.getEstadoRonda().jugadores);
     } catch (err) {
-      console.error('[crear_sala]', err);
       socket.emit('error_crear_sala', 'Error al crear la sala');
     }
   });
 
   // ─────────────────────────────────────
   // UNIRSE A SALA
-  // client: socket.emit('unirse_sala', { codigo, nombre })
+  // client: socket.emit('unirse_sala', { codigo, nombre, userId })
   // ─────────────────────────────────────
   socket.on('unirse_sala', async (payload = {}) => {
-    try {
-      const { codigo, nombre, userId } = payload;
+    const { codigo, nombre, userId: uidFromClient } = payload;   // 👈 idem
+    const sala = getGameRoom(codigo);
+    if (!sala) return socket.emit('error_unirse_sala', 'Sala no encontrada');
 
-      const sala = getGameRoom(codigo);
-      if (!sala) return socket.emit('error_unirse_sala', 'Sala no encontrada');
-
-      const resultado = sala.agregarJugador(socket.id, nombre);
-      if (resultado === 'Sala llena') {
-        return socket.emit('error_unirse_sala', 'La sala está llena');
-      }
-
-      socket.join(codigo);
-      logSala(codigo, `➕ ${nombre} se unió`);
-
-      const stableId = userId || socket.id; // 👈 ahora sí
-      sessionUsers.set(socket.id, { userId: stableId, name: nombre });
-
-      try { await upsertUser(stableId, nombre); }
-      catch (e) { console.error('[upsertUser]', e); }
-
-      socket.emit('sala_unida', {
-        codigo,
-        socketId: socket.id,
-        estado: sala.getEstadoRonda(),
-        esHost: false,
-      });
-
-      io.to(codigo).emit('estado_jugadores', sala.getEstadoRonda().jugadores);
-    } catch (err) {
-      console.error('[unirse_sala]', err);
-      socket.emit('error_unirse_sala', 'Error al unirse a la sala');
+    const resultado = sala.agregarJugador(socket.id, nombre);
+    if (resultado === 'Sala llena') {
+      return socket.emit('error_unirse_sala', 'La sala está llena');
     }
+
+    socket.join(codigo);
+    logSala(codigo, `➕ ${nombre} se unió`);
+
+    const stableId = uidFromClient || socket.id;                  // 👈 idem
+    sessionUsers.set(socket.id, { userId: stableId, name: nombre });
+    logJugador(socket.id, `🔐 userId estable set: ${stableId}`);
+
+    try { await upsertUser(stableId, nombre); } catch (e) { console.error('[upsertUser]', e); }
+
+    socket.emit('sala_unida', {
+      codigo,
+      socketId: socket.id,
+      estado: sala.getEstadoRonda(),
+      esHost: false,
+    });
+
+    io.to(codigo).emit('estado_jugadores', sala.getEstadoRonda().jugadores);
   });
 
   // ─────────────────────────────────────
@@ -215,8 +207,11 @@ io.on('connection', (socket) => {
       sala.gameId = await createGame({
         code: sala.codigo,
         tournamentId,
-        players: sala.jugadores, // {id, nombre}
-      });
+        players: sala.jugadores.map(j => ({
+          id: sessionUsers.get(j.id)?.userId || j.id,  // 👈 usa userId estable si existe
+          nombre: j.nombre,
+     })),
+    });
     } catch (e) {
       console.error('createGame', e);
     }

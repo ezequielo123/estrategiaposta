@@ -272,7 +272,7 @@ class _Header extends StatelessWidget {
               code: codigo,
               onCopy: () async {
                 if (codigo.isEmpty) return;
-                await Clipboard.setData(ClipboardData(text: codigo)); // 👈 copia real
+                Clipboard.setData(ClipboardData(text: codigo));
                 ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                   SnackBar(
                     content: Text('Código copiado: $codigo'),

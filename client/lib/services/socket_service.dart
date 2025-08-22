@@ -170,7 +170,7 @@ class SocketService {
     s.emit('crear_sala', {
       'nombreHost': nombreFinal,
       'maxJugadores': maxJugadores,
-      if (userId != null) 'userId': userId, // 👈 id estable
+      'userId': app.userId,   // 👈
     });
   }
 
@@ -247,7 +247,7 @@ class SocketService {
     s.emit('unirse_sala', {
       'codigo': code,
       'nombre': nombreFinal,
-      if (userId != null) 'userId': userId, // 👈 id estable
+      'userId': app.userId,   // 👈
     });
   }
 
