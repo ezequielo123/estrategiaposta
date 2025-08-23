@@ -8,8 +8,6 @@ import 'package:provider/provider.dart';
 import '../services/socket_service.dart';
 import '../state/app_state.dart';
 import 'lobby_screen.dart';
-import 'package:flutter/services.dart'; // Clipboard
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,6 +46,22 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  // ---------------- Helpers ----------------
+
+  List<Map<String, dynamic>> _asListOfMap(dynamic data) {
+    if (data is List) {
+      return data
+          .where((e) => e is Map)
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    }
+    return const [];
+  }
+
+  void _mostrarError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   // ---------------- LÓGICA ----------------
 
   Future<void> crearSala() async {
@@ -71,28 +85,18 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<AppState>().setCodigoSala(codigo);
         context.read<AppState>().setEsHost(true);
 
-        // 👇 COPIAR AL PORTAPAPELES + SNACK
-        await Clipboard.setData(ClipboardData(text: codigo));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Código $codigo copiado'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
         // Guarda última sala para rejoin
         await context.read<AppState>().saveLastSession(codigo);
 
-        final jugadoresRaw = (map['jugadores'] as List?) ?? const [];
-        final jugadores = jugadoresRaw
-            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        // Jugadores (cast defensivo)
+        final jugadores = _asListOfMap(map['jugadores']);
 
         setState(() {
           _jugadores = jugadores;
           _cargando = false;
         });
 
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const LobbyScreen()),
@@ -100,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       (jugadores) {
         setState(() {
-          _jugadores = jugadores;
+          _jugadores = _asListOfMap(jugadores); // ✅ evita List<dynamic> crash
           _cargando = false;
         });
       },
@@ -133,28 +137,18 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<AppState>().setCodigoSala(cod);
         context.read<AppState>().setEsHost(false);
 
-        // 👇 COPIAR + SNACK
-        await Clipboard.setData(ClipboardData(text: cod));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Código $cod copiado'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
         // Guarda última sala para rejoin
         await context.read<AppState>().saveLastSession(cod);
 
-        final jugadoresRaw = (map['jugadores'] as List?) ?? const [];
-        final jugadores = jugadoresRaw
-            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        // Jugadores (cast defensivo)
+        final jugadores = _asListOfMap(map['jugadores']);
 
         setState(() {
           _jugadores = jugadores;
           _cargando = false;
         });
 
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const LobbyScreen()),
@@ -162,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       (jugadores) {
         setState(() {
-          _jugadores = jugadores;
+          _jugadores = _asListOfMap(jugadores); // ✅ evita List<dynamic> crash
           _cargando = false;
         });
       },
@@ -191,16 +185,14 @@ class _HomeScreenState extends State<HomeScreen> {
         // Refresca última sala
         await context.read<AppState>().saveLastSession(cod);
 
-        final jugadoresRaw = (map['jugadores'] as List?) ?? const [];
-        final jugadores = jugadoresRaw
-            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        final jugadores = _asListOfMap(map['jugadores']);
 
         setState(() {
           _jugadores = jugadores;
           _cargando = false;
         });
 
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const LobbyScreen()),
@@ -208,17 +200,10 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onEstadoJugadores: (jugadores) {
         setState(() {
-          _jugadores = (jugadores as List?)
-                  ?.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
-                  .toList() ??
-              <Map<String, dynamic>>[];
+          _jugadores = _asListOfMap(jugadores); // ✅ defensivo
         });
       },
     );
-  }
-
-  void _mostrarError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   // ---------------- UI ----------------
@@ -306,15 +291,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const Spacer(),
                         // Chips de highlights (opcional)
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: const [
-                            _Pill(text: 'Multijugador'),
-                            _Pill(text: 'Rondas dinámicas'),
-                            _Pill(text: 'Ranking global'),
-                          ],
-                        ),
+                        // Wrap(
+                        //   spacing: 8,
+                        //   runSpacing: 8,
+                        //   children: const [
+                        //     _Pill(text: 'Multijugador'),
+                        //     _Pill(text: 'Rondas dinámicas'),
+                        //     _Pill(text: 'Ranking global'),
+                        //   ],
+                        // ),
                       ],
                     ),
                   ),

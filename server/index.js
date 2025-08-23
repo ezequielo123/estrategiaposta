@@ -57,6 +57,10 @@ const io = new Server(server, {
 // Anti-spam carteles (cooldown por jugador)
 const lastCartelAt = new Map();
 
+// Salas vacías pendientes de borrar (grace period)
+const pendingDeletes = new Map(); // codigo -> Timeout
+const GRACE_MS = 120000; // 2 minutos (ajustá a gusto)
+
 
 // pequeño helper para armar snapshot de predicciones (completo)
 function snapshotEstadoPredicciones(sala) {
@@ -109,6 +113,12 @@ io.on('connection', (socket) => {
     const { codigo, nombre, userId: uidFromClient } = payload;   // 👈 idem
     const sala = getGameRoom(codigo);
     if (!sala) return socket.emit('error_unirse_sala', 'Sala no encontrada');
+
+    if (pendingDeletes.has(codigo)) {
+      clearTimeout(pendingDeletes.get(codigo));
+      pendingDeletes.delete(codigo);
+      console.log(`✅ Reingreso a ${codigo}, se canceló el borrado diferido`);
+    }
 
     const resultado = sala.agregarJugador(socket.id, nombre);
     if (resultado === 'Sala llena') {
@@ -429,7 +439,15 @@ io.on('connection', (socket) => {
       io.to(codigo).emit('estado_jugadores', sala.getJugadores());
 
       if (sala.jugadores.length === 0) {
-        eliminarSala(codigo);
+        if (!pendingDeletes.has(codigo)) {
+          const t = setTimeout(() => {
+            eliminarSala(codigo);
+            pendingDeletes.delete(codigo);
+            console.log(`🗑️ Sala ${codigo} eliminada por inactividad`);
+          }, GRACE_MS);
+          pendingDeletes.set(codigo, t);
+          console.log(`⏳ Sala ${codigo} quedará en espera ${GRACE_MS/1000}s`);
+        }
       }
     }
   });
@@ -451,7 +469,15 @@ io.on('connection', (socket) => {
         io.to(codigo).emit('estado_jugadores', sala.getJugadores());
 
         if (sala.jugadores.length === 0) {
-          eliminarSala(codigo);
+          if (!pendingDeletes.has(codigo)) {
+            const t = setTimeout(() => {
+              eliminarSala(codigo);
+              pendingDeletes.delete(codigo);
+              console.log(`🗑️ Sala ${codigo} eliminada por inactividad`);
+            }, GRACE_MS);
+            pendingDeletes.set(codigo, t);
+            console.log(`⏳ Sala ${codigo} quedará en espera ${GRACE_MS/1000}s`);
+          }
         }
         break;
       }

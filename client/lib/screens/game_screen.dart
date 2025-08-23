@@ -23,7 +23,6 @@ import 'package:audioplayers/audioplayers.dart';
 import 'final_score_screen.dart';
 
 import '../widgets/turn_halo.dart';
-import '../widgets/turn_chip.dart';
 
 import '../widgets/cartel_mesa_overlay.dart';
 
@@ -336,19 +335,9 @@ class _GameScreenState extends State<GameScreen> {
           _esMiTurnoJuego = (id == app.socketId);
           _turnoJuegoNombre = nombre;
         });
-
-        // ✨ aviso sutil cuando arranca el turno de jugar
-        final msg = _esMiTurnoJuego ? '¡Es tu turno!' : 'Turno de $nombre';
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-
       } catch (_) {}
     });
+
 
     // Chat
     socket.on('chat_mensaje', (data) async {
@@ -871,16 +860,16 @@ class _GameScreenState extends State<GameScreen> {
             },
           ),
 
-          // 🟡 Chip sutil de turno, arriba centrado
-          Positioned(
-            top: 12,
-            left: 0,
-            right: 0,
-            child: TurnChip(
-              esMiTurno: esMiTurno,
-              texto: esMiTurno ? '¡Es tu turno!' : 'Turno de $nombreTurno',
-            ),
-          ),
+          // // 🟡 Chip sutil de turno, arriba centrado
+          // Positioned(
+          //   top: 12,
+          //   left: 0,
+          //   right: 0,
+          //   child: TurnChip(
+          //     esMiTurno: esMiTurno,
+          //     texto: esMiTurno ? '¡Es tu turno!' : 'Turno de $nombreTurno',
+          //   ),
+          // ),
         ],
       ),
     );

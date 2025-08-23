@@ -9,6 +9,7 @@ import '../screens/game_screen.dart';
 import 'home_screen.dart';
 import 'package:flutter/services.dart'; // Clipboard
 
+import '../utils/clipboard_helper.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -94,8 +95,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
     });
   }
 
-
-
   void iniciarPartida() {
     if (_iniciando) return;
     final app = context.read<AppState>();
@@ -111,17 +110,47 @@ class _LobbyScreenState extends State<LobbyScreen> {
     });
   }
 
-  Future<void> _copiarCodigo(String codigo) async {
-    if (codigo.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: codigo)); // 👈 copia real
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Código $codigo copiado'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
+  // Future<void> _copiarCodigo(String codigo) async {
+  //   if (codigo.isEmpty) return;
+
+  //   bool ok = false;
+
+  //   // INTENTO 1: API de Flutter
+  //   try {
+  //     await Clipboard.setData(ClipboardData(text: codigo));
+  //     ok = true;
+  //   } catch (_) {
+  //     // INTENTO 2: Web API (requiere HTTPS o localhost y gesto de usuario)
+  //     if (kIsWeb) {
+  //       try {
+  //         final clip = html.window.navigator.clipboard;
+  //         if (clip != null) {
+  //           await clip.writeText(codigo);
+  //           ok = true;
+  //         }
+  //       } catch (e) {
+  //         // INTENTO 3: fallback legacy con textarea + execCommand
+  //         try {
+  //           final ta = html.TextAreaElement()..value = codigo;
+  //           html.document.body!.append(ta);
+  //           ta.focus();
+  //           ta.select();
+  //           final success = html.document.execCommand('copy');
+  //           ta.remove();
+  //           ok = success;
+  //         } catch (_) {}
+  //       }
+  //     }
+  //   }
+
+  //   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+  //     SnackBar(
+  //       content: Text(ok
+  //           ? 'Código copiado: $codigo'
+  //           : 'No pude copiar automáticamente. Probá copiarlo manualmente.'),
+  //     ),
+  //   );
+  // }
 
   void _salirSala() {
     final app = context.read<AppState>();
@@ -166,7 +195,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           IconButton(
             tooltip: 'Copiar código',
             icon: const Icon(Icons.copy_rounded, color: Colors.white70),
-            onPressed: () => _copiarCodigo(codigo),
+            onPressed: () => ClipboardHelper.copy(codigo, context: context),
           ),
         ],
       ),
@@ -183,7 +212,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _Header(nombre: nombre, codigo: codigo),
+                _Header(
+                  nombre: nombre,
+                  codigo: codigo,
+                  onCopy: () => ClipboardHelper.copy(codigo, context: context),
+                ),
                 const SizedBox(height: 16),
                 Expanded(
                   child: _PlayersCard(
@@ -221,7 +254,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
 class _Header extends StatelessWidget {
   final String nombre;
   final String codigo;
-  const _Header({required this.nombre, required this.codigo});
+  final VoidCallback onCopy; // ✅ nuevo
+  const _Header({
+    required this.nombre,
+    required this.codigo,
+    required this.onCopy,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -270,16 +308,7 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 12),
             _CodePill(
               code: codigo,
-              onCopy: () async {
-                if (codigo.isEmpty) return;
-                Clipboard.setData(ClipboardData(text: codigo));
-                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                  SnackBar(
-                    content: Text('Código copiado: $codigo'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
+              onCopy: onCopy, // ✅ usa el callback recibido
             ),
           ],
         ),
